@@ -142,7 +142,7 @@ async function api(path, o) {
   if (!r.ok) throw new Error(msgOf(d) || 'حدث خطأ غير متوقع.');
   return d;
 }
-const show = v => { $('#auth').hidden = v !== 'auth'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); renderAuth(); } };
+const show = v => { $('#auth').hidden = v !== 'auth'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); rtStop(); renderAuth(); } };
 
 /* ---------- Auth ---------- */
 function renderAuth() {
@@ -200,9 +200,37 @@ $('#t').onclick = async () => {
   } catch (e) { toast('تعذّر تحميل تيليجرام'); }
 };
 
+/* ---------- Realtime (Supabase socket, live messages) ---------- */
+let WS = null, WSREF = 0, HB = null;
+function rtStop() {
+  clearInterval(HB);
+  if (WS) { WS.onclose = null; try { WS.close(); } catch (e) {} WS = null; }
+}
+function rtStart(chatId, onChange) {
+  rtStop();
+  const topic = 'realtime:chat-' + chatId;
+  try { WS = new WebSocket(CFG.url.replace('https', 'wss') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(CFG.key) + '&vsn=1.0.0'); }
+  catch (e) { return; }
+  const ws = WS;
+  const send = (t, event, payload) => { if (ws.readyState === 1) ws.send(JSON.stringify({ topic: t, event, payload, ref: String(++WSREF) })); };
+  ws.onopen = () => {
+    send(topic, 'phx_join', {
+      config: { broadcast: { ack: false, self: false }, presence: { key: '' },
+        postgres_changes: [{ event: 'INSERT', schema: 'public', table: 'messages', filter: 'chat_id=eq.' + chatId }] },
+      access_token: S.access_token
+    });
+    HB = setInterval(() => send('phoenix', 'heartbeat', {}), 25000);
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+    if (m.event === 'postgres_changes' && CHAT === chatId) onChange();
+  };
+  ws.onclose = () => { clearInterval(HB); if (CHAT === chatId) setTimeout(() => { if (CHAT === chatId) rtStart(chatId, onChange); }, 3000); };
+}
+
 /* ---------- App views ---------- */
 function tab(n) {
-  clearInterval(POLL); CHAT = null;
+  clearInterval(POLL); rtStop(); CHAT = null;
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
   $('#title').textContent = { chats: 'المحادثات', new: 'محادثة جديدة', me: 'حسابي' }[n];
   ({ chats: viewChats, new: viewNew, me: viewMe })[n]();
@@ -244,7 +272,7 @@ function openChat(id, name) {
     catch (e) { toast(e.message); inp.value = t; }
   };
   send.onclick = go; inp.onkeydown = e => { if (e.key === 'Enter') go(); };
-  load(); POLL = setInterval(load, 3000); inp.focus();
+  load(); POLL = setInterval(load, 10000); rtStart(id, load); inp.focus();
 }
 
 function viewNew() {
