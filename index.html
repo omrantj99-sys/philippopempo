@@ -245,14 +245,14 @@ function seenText(ts) {
   const day = d.toDateString() === now.toDateString() ? 'اليوم' : d.toDateString() === new Date(now - 864e5).toDateString() ? 'أمس' : d.toLocaleDateString('ar');
   return 'آخر ظهور ' + day + ' ' + t;
 }
-let PRES = null;
+let PRES = null, STOPREC = null;
 function ping() { if (ME && S) api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ last_seen: new Date().toISOString() }) }).catch(() => {}); }
 function startPresence() { clearInterval(PRES); PRES = setInterval(() => { if (!document.hidden) ping(); }, 45000); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
 
 /* ---------- App views ---------- */
 function tab(n) {
-  clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = '';
+  if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = '';
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
   $('#title').textContent = { chats: 'المحادثات', new: 'محادثة جديدة', me: 'حسابي' }[n];
   ({ chats: viewChats, new: viewNew, me: viewMe })[n]();
@@ -288,6 +288,10 @@ function msgEl(x, readAt) {
     const im = el('img'); im.alt = 'صورة';
     imgUrl(x.body).then(u => { im.src = u; }).catch(() => { im.alt = 'تعذّر تحميل الصورة'; });
     d.append(im);
+  } else if (x.kind === 'audio') {
+    const a = el('audio'); a.controls = true; a.preload = 'metadata'; a.style.cssText = 'width:230px;max-width:100%';
+    imgUrl(x.body).then(u => { a.src = u; }).catch(() => {});
+    d.append(a);
   } else d.append(document.createTextNode(x.body || ''));
   if (mine) d.append(el('span', 'tick', readAt && readAt >= x.created_at ? '✔✔' : '✔'));
   return d;
@@ -324,14 +328,14 @@ async function viewChats() {
 function openChat(id, name, otherId) {
   CHAT = id; $('#title').textContent = name;
   const v = $('#view'), box = el('div', 'msgs'), bar = el('div', 'bar'), inp = el('input'),
-        send = el('button', 'btn', 'إرسال'), att = el('button', 'btn ghost att', '📷'), file = el('input');
+        send = el('button', 'btn', 'إرسال'), att = el('button', 'btn ghost att', '📷'), mic = el('button', 'btn ghost att', '🎤'), cancel = el('button', 'btn ghost att', '✖'), file = el('input');
   file.type = 'file'; file.accept = 'image/*'; file.hidden = true; att.onclick = () => file.click();
-  inp.placeholder = 'اكتب رسالة…'; bar.append(att, inp, send, file);
+  inp.placeholder = 'اكتب رسالة…'; bar.append(att, mic, inp, send, cancel, file); cancel.hidden = true;
   const typ = el('div', 'mut'); typ.style.cssText = 'min-height:18px;font-size:.82rem'; v.replaceChildren(box, typ, bar);
   let tt, lastT = 0;
   const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
   inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
-  let seen = -1;
+  let seen = -1; const els = {};
   const load = async () => {
     if (CHAT !== id) return;
     try {
@@ -342,7 +346,11 @@ function openChat(id, name, otherId) {
       const readAt = mem.reduce((a, r) => (r.last_read_at > a ? r.last_read_at : a), '');
       if (otherId) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
       const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120 || !box.dataset.s;
-      box.replaceChildren(...m.map(x => msgEl(x, readAt)));
+      m.forEach(x => {
+        let e = els[x.id];
+        if (!e) { e = els[x.id] = msgEl(x, readAt); box.append(e); }
+        const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
+      });
       if (near) { box.scrollTop = box.scrollHeight; box.dataset.s = 1; }
       if (m.length !== seen) { seen = m.length; markRead(id); }
     } catch (e) {}
@@ -363,6 +371,44 @@ function openChat(id, name, otherId) {
       load();
     } catch (e) { toast(e.message || 'تعذّر إرسال الصورة'); }
   };
+  let rec = null, chunks = [], timer = null, t0 = 0, cancelled = false;
+  const resetUI = () => { clearInterval(timer); mic.textContent = '🎤'; cancel.hidden = true; inp.disabled = send.disabled = att.disabled = false; typ.textContent = ''; };
+  const sendAudio = async (blob, type) => {
+    try {
+      if (blob.size > 4.5e6) throw new Error('التسجيل كبير جداً');
+      toast('جارٍ إرسال التسجيل…');
+      const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : type.includes('mpeg') ? 'mp3' : 'webm';
+      const path = id + '/' + crypto.randomUUID() + '.' + ext;
+      const r = await raw('/storage/v1/object/chat-media/' + path, { method: 'POST', headers: { 'Content-Type': type }, body: blob });
+      if (!r.ok) throw new Error('تعذّر رفع التسجيل');
+      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'audio', body: path }) });
+      load();
+    } catch (e) { toast(e.message || 'تعذّر إرسال التسجيل'); }
+  };
+  mic.onclick = async () => {
+    if (rec) { rec.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+      chunks = []; cancelled = false;
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const type = (rec.mimeType || mime || 'audio/webm').split(';')[0];
+        rec = null; resetUI();
+        if (!cancelled && chunks.length) await sendAudio(new Blob(chunks, { type }), type);
+      };
+      rec.start(); t0 = Date.now(); mic.textContent = '⬆️'; cancel.hidden = false; inp.disabled = send.disabled = att.disabled = true;
+      timer = setInterval(() => {
+        const sec = Math.floor((Date.now() - t0) / 1000);
+        typ.textContent = '🔴 يسجّل ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + ' — اضغط ⬆️ للإرسال';
+        if (sec >= 120 && rec) rec.stop();
+      }, 500);
+    } catch (e) { toast('تعذّر الوصول للمايكروفون، اسمح له من إعدادات المتصفح'); }
+  };
+  cancel.onclick = () => { cancelled = true; if (rec) rec.stop(); };
+  STOPREC = cancel.onclick;
   send.onclick = go; inp.onkeydown = e => { if (e.key === 'Enter') go(); };
   load(); POLL = setInterval(load, 10000); rtStart(id, load, showTyping); inp.focus();
 }
