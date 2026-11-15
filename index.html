@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PhilippoPempo</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B1F4B">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 @property --a{syntax:'<angle>';inherits:false;initial-value:0deg}
@@ -65,6 +68,8 @@ header b{font-size:1.1rem}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center;z-index:9}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
+.av{overflow:hidden}.av img{width:100%;height:100%;object-fit:cover;display:block}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);padding:12px 14px;border-radius:14px;font-size:.92rem}.opt input{width:auto}
 .tick{font-size:.72rem;opacity:.85;margin-inline-start:6px}
 .badge{background:var(--acc);color:#04342e;border-radius:999px;min-width:22px;padding:2px 8px;font-size:.78rem;font-weight:800;text-align:center}
 .bar .att{padding:0 12px;font-size:1.1rem}
@@ -116,7 +121,24 @@ const CFG = {
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 3200); };
-const avatar = n => el('div', 'av', ([...String(n).trim()][0] || '?').toUpperCase());
+const AV = p => CFG.url + '/storage/v1/object/public/avatars/' + p;
+const avatar = (n, p) => {
+  const d = el('div', 'av', ([...String(n).trim()][0] || '?').toUpperCase());
+  if (p) { const i = new Image(); i.alt = ''; i.onload = () => { d.textContent = ''; d.append(i); }; i.src = AV(p); }
+  return d;
+};
+function squarePhoto(f) {
+  return new Promise((ok, no) => {
+    const im = new Image(), u = URL.createObjectURL(f);
+    im.onload = () => {
+      const m = Math.min(im.width, im.height), c = document.createElement('canvas'); c.width = c.height = 256;
+      c.getContext('2d').drawImage(im, (im.width - m) / 2, (im.height - m) / 2, m, m, 0, 0, 256, 256);
+      URL.revokeObjectURL(u); c.toBlob(b => b ? ok(b) : no(new Error('x')), 'image/jpeg', 0.8);
+    };
+    im.onerror = () => no(new Error('الملف ليس صورة صالحة')); im.src = u;
+  });
+}
+let PROF = {};
 const clean = p => p.replace(/[\s-]/g, '');
 let S = null, ME = null, CHAT = null, POLL = null, BUSY = false;
 try { S = JSON.parse(localStorage.getItem('pp_s') || 'null'); } catch (e) {}
@@ -246,7 +268,7 @@ function seenText(ts) {
   return 'آخر ظهور ' + day + ' ' + t;
 }
 let PRES = null, STOPREC = null;
-function ping() { if (ME && S) api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ last_seen: new Date().toISOString() }) }).catch(() => {}); }
+function ping() { if (ME && S) api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ last_seen: PROF.hide_last_seen ? null : new Date().toISOString() }) }).catch(() => {}); }
 function startPresence() { clearInterval(PRES); PRES = setInterval(() => { if (!document.hidden) ping(); }, 45000); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
 
@@ -300,7 +322,7 @@ function msgEl(x, readAt) {
 async function viewChats() {
   const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
-    const rows = await api('/rest/v1/chat_members?select=chat_id,user_id,last_read_at,profiles(name,phone)');
+    const rows = await api('/rest/v1/chat_members?select=chat_id,user_id,last_read_at,profiles(name,phone,avatar_path)');
     const by = {}, mine = {};
     rows.forEach(r => { (by[r.chat_id] = by[r.chat_id] || []).push(r); if (r.user_id === ME.id) mine[r.chat_id] = r.last_read_at; });
     const ids = Object.keys(by);
@@ -315,9 +337,9 @@ async function viewChats() {
     const items = ids.map(id => {
       const names = by[id].filter(r => r.user_id !== ME.id).map(r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم').join('، ') || 'ملاحظاتي';
       const b = el('button', 'row'); b.dataset.n = names.toLowerCase();
-      b.append(avatar(names), el('div', 'grow', names));
+      const oth = by[id].filter(r => r.user_id !== ME.id); b.append(avatar(names, oth.length === 1 && oth[0].profiles ? oth[0].profiles.avatar_path : null), el('div', 'grow', names));
       if (unread[id]) b.append(el('span', 'badge', unread[id]));
-      const oth = by[id].filter(r => r.user_id !== ME.id); b.onclick = () => openChat(id, names, oth.length === 1 ? oth[0].user_id : null); return b;
+      b.onclick = () => openChat(id, names, oth.length === 1 ? oth[0].user_id : null); return b;
     });
     list.append(...items);
     q.oninput = () => { const t = q.value.trim().toLowerCase(); items.forEach(b => { b.hidden = !b.dataset.n.includes(t); }); };
@@ -344,7 +366,7 @@ function openChat(id, name, otherId) {
         api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`)
       ]);
       const readAt = mem.reduce((a, r) => (r.last_read_at > a ? r.last_read_at : a), '');
-      if (otherId) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
+      if (otherId && !PROF.hide_last_seen) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
       const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120 || !box.dataset.s;
       m.forEach(x => {
         let e = els[x.id];
@@ -434,11 +456,31 @@ function viewNew() {
 
 async function viewMe() {
   const v = $('#view'); let p = {};
-  try { p = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone'))[0] || {}; } catch (e) {}
+  try { p = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone,avatar_path,hide_last_seen'))[0] || {}; } catch (e) {}
   const n = el('input'), ph = el('input'), sv = el('button', 'btn', 'حفظ التغييرات'), out = el('button', 'btn ghost', 'تسجيل الخروج');
   n.placeholder = 'الاسم'; n.value = p.name || ''; ph.placeholder = 'رقم الهاتف (ليجدك أصدقاؤك)'; ph.value = p.phone || ''; ph.inputMode = 'tel'; ph.dir = 'ltr';
-  const card = el('div', 'prof'); card.append(avatar(p.name || ME.email || '?'), el('div', 'mut', ME.email || ''));
-  v.replaceChildren(card, n, ph, sv, out);
+  const card = el('div', 'prof'); const av = avatar(p.name || ME.email || '?', p.avatar_path), pick = el('input'), chg = el('button', 'lnk', 'تغيير الصورة'), opt = el('label', 'opt'), hid = el('input');
+  pick.type = 'file'; pick.accept = 'image/*'; pick.hidden = true; chg.onclick = () => pick.click(); av.onclick = () => pick.click(); av.style.cursor = 'pointer';
+  hid.type = 'checkbox'; hid.checked = !!p.hide_last_seen; opt.append(el('span', '', 'إخفاء آخر ظهور (وإخفاء آخر ظهور الآخرين عنك)'), hid);
+  card.append(av, chg, el('div', 'mut', ME.email || ''), pick);
+  pick.onchange = async () => {
+    const f = pick.files[0]; pick.value = ''; if (!f) return;
+    try {
+      const blob = await squarePhoto(f), path = ME.id + '/avatar.jpg';
+      const r = await raw('/storage/v1/object/avatars/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob });
+      if (!r.ok) throw new Error('تعذّر رفع الصورة');
+      const ap = path + '?v=' + Date.now();
+      await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ avatar_path: ap }) });
+      PROF.avatar_path = ap; toast('تم تحديث الصورة ✓'); viewMe();
+    } catch (e) { toast(e.message); }
+  };
+  hid.onchange = async () => {
+    try {
+      await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ hide_last_seen: hid.checked, last_seen: hid.checked ? null : new Date().toISOString() }) });
+      PROF.hide_last_seen = hid.checked; toast(hid.checked ? 'تم إخفاء آخر ظهور' : 'تم إظهار آخر ظهور');
+    } catch (e) { hid.checked = !hid.checked; toast(e.message); }
+  };
+  v.replaceChildren(card, n, ph, opt, sv, out);
   sv.onclick = async () => {
     try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: n.value.trim(), phone: clean(ph.value) || null }) }); toast('تم الحفظ ✓'); }
     catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
@@ -455,8 +497,10 @@ async function boot() {
   }
   if (!S) return show('auth');
   try { ME = await api('/auth/v1/user'); } catch (e) { save(null); return show('auth'); }
+  try { PROF = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone,avatar_path,hide_last_seen'))[0] || {}; } catch (e) { PROF = {}; }
   show('app'); tab('chats'); ping(); startPresence();
 }
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();
 </script>
 </body>
