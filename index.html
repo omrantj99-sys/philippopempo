@@ -68,6 +68,7 @@ header b{font-size:1.1rem}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center;z-index:9}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .msg{cursor:pointer}.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chip{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 8px;font-size:.85rem}.chip.me{outline:1.5px solid var(--acc)}.rxpick{display:flex;gap:2px;margin-top:6px;background:var(--card);border-radius:16px;padding:4px;width:max-content;max-width:100%}.rxpick button{border:0;background:0;font-size:1.4rem;cursor:pointer;padding:2px 5px}
+.quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}.rxpick button.rp{font-size:.9rem;font-weight:700;color:var(--pri)}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
 .av{overflow:hidden}.av img{width:100%;height:100%;object-fit:cover;display:block}
 .opt{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);padding:12px 14px;border-radius:14px;font-size:.92rem}.opt input{width:auto}
@@ -322,6 +323,7 @@ function msgEl(x, readAt) {
 }
 
 const RXS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+function prevTxt(x) { return x.kind === 'image' ? '📷 صورة' : x.kind === 'audio' ? '🎤 رسالة صوتية' : String(x.body || '').slice(0, 60); }
 function drawRx(e, list) {
   let b = e.querySelector('.rx');
   if (!list.length) { if (b) b.remove(); return; }
@@ -329,7 +331,7 @@ function drawRx(e, list) {
   const g = {}; list.forEach(r => { const o = g[r.emoji] = g[r.emoji] || { n: 0, me: false }; o.n++; if (r.user_id === ME.id) o.me = true; });
   b.replaceChildren(...Object.keys(g).map(k => el('span', 'chip' + (g[k].me ? ' me' : ''), k + (g[k].n > 1 ? ' ' + g[k].n : ''))));
 }
-function pickRx(chatId, msgId, anchor, cur, done) {
+function pickRx(chatId, msgId, anchor, cur, done, onReply) {
   document.querySelectorAll('.rxpick').forEach(x => x.remove());
   const p = el('div', 'rxpick');
   RXS.forEach(k => {
@@ -344,6 +346,7 @@ function pickRx(chatId, msgId, anchor, cur, done) {
     };
     p.append(b);
   });
+  if (onReply) { const rb = el('button', 'rp', 'رد'); rb.onclick = ev => { ev.stopPropagation(); p.remove(); onReply(); }; p.append(rb); }
   anchor.append(p);
 }
 async function viewChats() {
@@ -380,7 +383,12 @@ function openChat(id, name, otherId) {
         send = el('button', 'btn', 'إرسال'), att = el('button', 'btn ghost att', '📷'), mic = el('button', 'btn ghost att', '🎤'), cancel = el('button', 'btn ghost att', '✖'), file = el('input');
   file.type = 'file'; file.accept = 'image/*'; file.hidden = true; att.onclick = () => file.click();
   inp.placeholder = 'اكتب رسالة…'; bar.append(att, mic, inp, send, cancel, file); cancel.hidden = true;
-  const typ = el('div', 'mut'); typ.style.cssText = 'min-height:18px;font-size:.82rem'; v.replaceChildren(box, typ, bar);
+  const typ = el('div', 'mut'); typ.style.cssText = 'min-height:18px;font-size:.82rem'; let reply = null; const rbar = el('div', 'rbar'), rtx = el('span'), rcl = el('button', '', '✖'); rbar.append(rtx, rcl); rbar.hidden = true;
+  const rp = () => (reply ? { reply_to: reply } : {});
+  const clearReply = () => { reply = null; rbar.hidden = true; };
+  const setReply = x => { reply = x.id; rtx.textContent = '↩️ ' + prevTxt(x); rbar.hidden = false; inp.focus(); };
+  rcl.onclick = clearReply;
+  v.replaceChildren(box, typ, rbar, bar);
   let tt, lastT = 0;
   const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
   inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
@@ -389,19 +397,21 @@ function openChat(id, name, otherId) {
     if (CHAT !== id) return;
     try {
       const [m, mem, rx] = await Promise.all([
-        api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at`),
+        api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at,reply_to`),
         api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`),
         api(`/rest/v1/message_reactions?chat_id=eq.${id}&select=message_id,user_id,emoji`).catch(() => [])
       ]);
       RX = {}; rx.forEach(r => { (RX[r.message_id] = RX[r.message_id] || []).push(r); });
       const readAt = mem.reduce((a, r) => (r.last_read_at > a ? r.last_read_at : a), '');
       if (otherId && !PROF.hide_last_seen) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
+      const byId = {}; m.forEach(x => { byId[x.id] = x; });
       const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120 || !box.dataset.s;
       m.forEach(x => {
         let e = els[x.id];
         if (!e) {
           e = els[x.id] = msgEl(x, readAt); box.append(e);
-          e.onclick = ev => { if (ev.target.closest('audio,.rxpick')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load); };
+          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x)); };
+          if (x.reply_to) { const o = byId[x.reply_to], q = el('div', 'quote', o ? prevTxt(o) : 'رسالة محذوفة'); q.onclick = ev => { ev.stopPropagation(); const t = els[x.reply_to]; if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }; e.prepend(q); }
         }
         drawRx(e, RX[x.id] || []);
         const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
@@ -412,7 +422,7 @@ function openChat(id, name, otherId) {
   };
   const go = async () => {
     const t = inp.value.trim(); if (!t) return; inp.value = '';
-    try { await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, body: t }) }); load(); }
+    try { await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, body: t, ...rp() }) }); clearReply(); load(); }
     catch (e) { toast(e.message); inp.value = t; }
   };
   file.onchange = async () => {
@@ -422,7 +432,7 @@ function openChat(id, name, otherId) {
       const blob = await compress(f), path = id + '/' + crypto.randomUUID() + '.jpg';
       const r = await raw('/storage/v1/object/chat-media/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
       if (!r.ok) throw new Error('تعذّر رفع الصورة');
-      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'image', body: path }) });
+      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'image', body: path, ...rp() }) }); clearReply();
       load();
     } catch (e) { toast(e.message || 'تعذّر إرسال الصورة'); }
   };
@@ -436,7 +446,7 @@ function openChat(id, name, otherId) {
       const path = id + '/' + crypto.randomUUID() + '.' + ext;
       const r = await raw('/storage/v1/object/chat-media/' + path, { method: 'POST', headers: { 'Content-Type': type }, body: blob });
       if (!r.ok) throw new Error('تعذّر رفع التسجيل');
-      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'audio', body: path }) });
+      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'audio', body: path, ...rp() }) }); clearReply();
       load();
     } catch (e) { toast(e.message || 'تعذّر إرسال التسجيل'); }
   };
