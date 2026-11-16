@@ -68,7 +68,7 @@ header b{font-size:1.1rem}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center;z-index:9}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .msg{cursor:pointer}.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chip{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 8px;font-size:.85rem}.chip.me{outline:1.5px solid var(--acc)}.rxpick{display:flex;gap:2px;margin-top:6px;background:var(--card);border-radius:16px;padding:4px;width:max-content;max-width:100%}.rxpick button{border:0;background:0;font-size:1.4rem;cursor:pointer;padding:2px 5px}
-.quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}.rxpick button.rp{font-size:.9rem;font-weight:700;color:var(--pri)}
+.quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}.rxpick button.del{font-size:.9rem;font-weight:700;color:#D6334B}.rxpick button.rp{font-size:.9rem;font-weight:700;color:var(--pri)}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
 .av{overflow:hidden}.av img{width:100%;height:100%;object-fit:cover;display:block}
 .opt{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);padding:12px 14px;border-radius:14px;font-size:.92rem}.opt input{width:auto}
@@ -331,7 +331,7 @@ function drawRx(e, list) {
   const g = {}; list.forEach(r => { const o = g[r.emoji] = g[r.emoji] || { n: 0, me: false }; o.n++; if (r.user_id === ME.id) o.me = true; });
   b.replaceChildren(...Object.keys(g).map(k => el('span', 'chip' + (g[k].me ? ' me' : ''), k + (g[k].n > 1 ? ' ' + g[k].n : ''))));
 }
-function pickRx(chatId, msgId, anchor, cur, done, onReply) {
+function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete) {
   document.querySelectorAll('.rxpick').forEach(x => x.remove());
   const p = el('div', 'rxpick');
   RXS.forEach(k => {
@@ -347,6 +347,7 @@ function pickRx(chatId, msgId, anchor, cur, done, onReply) {
     p.append(b);
   });
   if (onReply) { const rb = el('button', 'rp', 'رد'); rb.onclick = ev => { ev.stopPropagation(); p.remove(); onReply(); }; p.append(rb); }
+  if (onDelete) { const db = el('button', 'del', 'حذف'); db.onclick = ev => { ev.stopPropagation(); p.remove(); onDelete(); }; p.append(db); }
   anchor.append(p);
 }
 async function viewChats() {
@@ -388,6 +389,15 @@ function openChat(id, name, otherId) {
   const clearReply = () => { reply = null; rbar.hidden = true; };
   const setReply = x => { reply = x.id; rtx.textContent = '↩️ ' + prevTxt(x); rbar.hidden = false; inp.focus(); };
   rcl.onclick = clearReply;
+  const delMsg = async x => {
+    if (!confirm('تحذف هالرسالة للجميع؟')) return;
+    try {
+      const r = await api('/rest/v1/messages?id=eq.' + x.id, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+      if (!r || !r.length) throw new Error('ما فيك تحذف هالرسالة');
+      if (reply === x.id) clearReply();
+      load();
+    } catch (e) { toast(e.message); }
+  };
   v.replaceChildren(box, typ, rbar, bar);
   let tt, lastT = 0;
   const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
@@ -410,12 +420,13 @@ function openChat(id, name, otherId) {
         let e = els[x.id];
         if (!e) {
           e = els[x.id] = msgEl(x, readAt); box.append(e);
-          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x)); };
+          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x), x.sender_id === ME.id ? () => delMsg(x) : null); };
           if (x.reply_to) { const o = byId[x.reply_to], q = el('div', 'quote', o ? prevTxt(o) : 'رسالة محذوفة'); q.onclick = ev => { ev.stopPropagation(); const t = els[x.reply_to]; if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }; e.prepend(q); }
         }
         drawRx(e, RX[x.id] || []);
         const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
       });
+      Object.keys(els).forEach(k => { if (!byId[k]) { els[k].remove(); delete els[k]; } });
       if (near) { box.scrollTop = box.scrollHeight; box.dataset.s = 1; }
       if (m.length !== seen) { seen = m.length; markRead(id); }
     } catch (e) {}
