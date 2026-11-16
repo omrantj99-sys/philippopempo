@@ -491,13 +491,14 @@ async function viewMe() {
 }
 
 /* ---------- Push ---------- */
-const VAPID_PUB = 'BD0OMA0siH_VwngmIklroZhqGtzkM8mDkNQL4Z8rChM5Vjq1ersm4BU-uueoyVPqtWGgGAP0H02OBUJa4n6k268';
+const VAPID_PUB = 'BGT8t2_f8a6hbEq9h0MhGJo3ZJJAslAJXPWuJtuDPDsIqt9lVs-Eq93dnhDw5vIxfeUkJ6TJ7ELZ2zckfG7FOVQ';
 function b64u(s) { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); }
 async function enablePush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('الجهاز ما بيدعم الإشعارات. على الآيفون ثبّت التطبيق أولاً.');
   if (await Notification.requestPermission() !== 'granted') throw new Error('ما انعطت صلاحية الإشعارات');
   const reg = await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) });
+  const old = await reg.pushManager.getSubscription(); if (old) await old.unsubscribe();
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) });
   const j = sub.toJSON();
   await api('/rest/v1/push_subscriptions?on_conflict=endpoint', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_id: ME.id }) });
 }
