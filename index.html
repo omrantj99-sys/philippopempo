@@ -67,6 +67,7 @@ header b{font-size:1.1rem}
 .empty{margin:auto;text-align:center;color:var(--mut)}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center;z-index:9}
 #toast.on{opacity:1;transform:translate(-50%,0)}
+.msg{cursor:pointer}.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chip{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 8px;font-size:.85rem}.chip.me{outline:1.5px solid var(--acc)}.rxpick{display:flex;gap:2px;margin-top:6px;background:var(--card);border-radius:16px;padding:4px;width:max-content;max-width:100%}.rxpick button{border:0;background:0;font-size:1.4rem;cursor:pointer;padding:2px 5px}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
 .av{overflow:hidden}.av img{width:100%;height:100%;object-fit:cover;display:block}
 .opt{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);padding:12px 14px;border-radius:14px;font-size:.92rem}.opt input{width:auto}
@@ -243,7 +244,8 @@ function rtStart(chatId, onChange, onTyping) {
     send(topic, 'phx_join', {
       config: { broadcast: { ack: false, self: false }, presence: { key: '' },
         postgres_changes: [{ event: 'INSERT', schema: 'public', table: 'messages', filter: 'chat_id=eq.' + chatId },
-          { event: 'UPDATE', schema: 'public', table: 'chat_members', filter: 'chat_id=eq.' + chatId }] },
+          { event: 'UPDATE', schema: 'public', table: 'chat_members', filter: 'chat_id=eq.' + chatId },
+          { event: '*', schema: 'public', table: 'message_reactions', filter: 'chat_id=eq.' + chatId }] },
       access_token: S.access_token
     });
     HB = setInterval(() => send('phoenix', 'heartbeat', {}), 25000);
@@ -319,6 +321,31 @@ function msgEl(x, readAt) {
   return d;
 }
 
+const RXS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+function drawRx(e, list) {
+  let b = e.querySelector('.rx');
+  if (!list.length) { if (b) b.remove(); return; }
+  if (!b) { b = el('div', 'rx'); e.append(b); }
+  const g = {}; list.forEach(r => { const o = g[r.emoji] = g[r.emoji] || { n: 0, me: false }; o.n++; if (r.user_id === ME.id) o.me = true; });
+  b.replaceChildren(...Object.keys(g).map(k => el('span', 'chip' + (g[k].me ? ' me' : ''), k + (g[k].n > 1 ? ' ' + g[k].n : ''))));
+}
+function pickRx(chatId, msgId, anchor, cur, done) {
+  document.querySelectorAll('.rxpick').forEach(x => x.remove());
+  const p = el('div', 'rxpick');
+  RXS.forEach(k => {
+    const b = el('button', '', k);
+    b.onclick = async ev => {
+      ev.stopPropagation(); p.remove();
+      try {
+        if (cur === k) await api('/rest/v1/message_reactions?message_id=eq.' + msgId + '&user_id=eq.' + ME.id, { method: 'DELETE' });
+        else await api('/rest/v1/message_reactions?on_conflict=message_id,user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ message_id: msgId, chat_id: chatId, emoji: k }) });
+        done();
+      } catch (e) { toast(e.message); }
+    };
+    p.append(b);
+  });
+  anchor.append(p);
+}
 async function viewChats() {
   const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
@@ -357,20 +384,26 @@ function openChat(id, name, otherId) {
   let tt, lastT = 0;
   const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
   inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
-  let seen = -1; const els = {};
+  let seen = -1, RX = {}; const els = {};
   const load = async () => {
     if (CHAT !== id) return;
     try {
-      const [m, mem] = await Promise.all([
+      const [m, mem, rx] = await Promise.all([
         api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at`),
-        api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`)
+        api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`),
+        api(`/rest/v1/message_reactions?chat_id=eq.${id}&select=message_id,user_id,emoji`).catch(() => [])
       ]);
+      RX = {}; rx.forEach(r => { (RX[r.message_id] = RX[r.message_id] || []).push(r); });
       const readAt = mem.reduce((a, r) => (r.last_read_at > a ? r.last_read_at : a), '');
       if (otherId && !PROF.hide_last_seen) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
       const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120 || !box.dataset.s;
       m.forEach(x => {
         let e = els[x.id];
-        if (!e) { e = els[x.id] = msgEl(x, readAt); box.append(e); }
+        if (!e) {
+          e = els[x.id] = msgEl(x, readAt); box.append(e);
+          e.onclick = ev => { if (ev.target.closest('audio,.rxpick')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load); };
+        }
+        drawRx(e, RX[x.id] || []);
         const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
       });
       if (near) { box.scrollTop = box.scrollHeight; box.dataset.s = 1; }
