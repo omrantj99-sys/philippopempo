@@ -69,6 +69,7 @@ header b{font-size:1.1rem}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .msg{cursor:pointer}.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chip{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 8px;font-size:.85rem}.chip.me{outline:1.5px solid var(--acc)}.rxpick{display:flex;gap:2px;margin-top:6px;background:var(--card);border-radius:16px;padding:4px;width:max-content;max-width:100%}.rxpick button{border:0;background:0;font-size:1.4rem;cursor:pointer;padding:2px 5px}
 .quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}.sname{font-size:.75rem;font-weight:700;color:var(--acc);margin-bottom:2px}.rxpick button.del{font-size:.9rem;font-weight:700;color:#D6334B}.rxpick button.rp{font-size:.9rem;font-weight:700;color:var(--pri)}
+@keyframes sp{to{width:100%}}.sv{position:fixed;inset:0;background:#000;z-index:50;display:flex;flex-direction:column;color:#fff}.sv .bars{display:flex;gap:4px;padding:10px 10px 4px}.sv .bars i{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden}.sv .bars b{display:block;height:100%;width:0;background:#fff}.sv .top{display:flex;align-items:center;gap:10px;padding:6px 12px}.sv .grow{flex:1}.sv .body{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;font-size:1.6rem;font-weight:700;overflow:hidden;position:relative;cursor:pointer}.sv .body img{max-width:100%;max-height:100%;object-fit:contain}.sv .cap{position:absolute;bottom:0;left:0;right:0;padding:12px 16px;background:rgba(0,0,0,.55);font-size:1rem;font-weight:400}.sv>.top button{border:0;background:0;color:#fff;font-size:1.3rem;cursor:pointer}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
 .av{overflow:hidden}.av img{width:100%;height:100%;object-fit:cover;display:block}
 .opt{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);padding:12px 14px;border-radius:14px;font-size:.92rem}.opt input{width:auto}
@@ -104,6 +105,7 @@ header b{font-size:1.1rem}
   <section id="view"></section>
   <nav class="nav">
     <button data-t="chats"><span>💬</span>المحادثات</button>
+    <button data-t="status"><span>🟢</span>الحالة</button>
     <button data-t="new"><span>➕</span>جديد</button>
     <button data-t="me"><span>👤</span>حسابي</button>
   </nav>
@@ -279,8 +281,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) ping
 function tab(n) {
   if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = '';
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
-  $('#title').textContent = { chats: 'المحادثات', new: 'محادثة جديدة', me: 'حسابي' }[n];
-  ({ chats: viewChats, new: viewNew, me: viewMe })[n]();
+  $('#title').textContent = { chats: 'المحادثات', status: 'الحالة', new: 'محادثة جديدة', me: 'حسابي' }[n];
+  ({ chats: viewChats, status: viewStatus, new: viewNew, me: viewMe })[n]();
 }
 document.querySelectorAll('.nav button').forEach(b => b.onclick = () => tab(b.dataset.t));
 const empty = (a, b) => { const d = el('div', 'empty'); d.append(el('b', '', a), el('p', 'mut', b)); return d; };
@@ -579,6 +581,96 @@ async function viewMe() {
     catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
   };
   out.onclick = () => { save(null); ME = null; show('auth'); };
+}
+
+/* ---------- Status ---------- */
+const ST = p => CFG.url + '/storage/v1/object/public/statuses/' + p;
+const SBG = ['#128C7E', '#8E44AD', '#E67E22', '#2C3E50', '#C0392B'];
+let SEEN = {}; try { SEEN = JSON.parse(localStorage.getItem('seenSt') || '{}'); } catch (e) {}
+const seenSave = () => { try { localStorage.setItem('seenSt', JSON.stringify(SEEN)); } catch (e) {} };
+function ago(t) { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'الآن' : m < 60 ? 'قبل ' + m + ' د' : 'قبل ' + Math.round(m / 60) + ' س'; }
+const stDel = x => { if (x.media_path) raw('/storage/v1/object/statuses/' + x.media_path, { method: 'DELETE' }).catch(() => {}); return api('/rest/v1/statuses?id=eq.' + x.id, { method: 'DELETE' }); };
+function textEditor(done) {
+  let bi = 0;
+  const o = el('div', 'sv'), ta = el('textarea'), sw = el('div'), ok = el('button', 'btn', 'نشر'), x = el('button', '', '✕'), bar = el('div'), top = el('div', 'top');
+  const paint = () => { o.style.background = SBG[bi]; };
+  ta.placeholder = 'اكتب حالتك…'; ta.maxLength = 300;
+  ta.style.cssText = 'flex:1;background:transparent;border:0;outline:0;color:#fff;font-size:1.6rem;font-weight:700;font-family:inherit;text-align:center;resize:none;padding:24px';
+  sw.style.cssText = 'display:flex;gap:10px;justify-content:center;padding:10px';
+  SBG.forEach((c, k) => { const d = el('button'); d.style.cssText = 'width:30px;height:30px;border-radius:50%;border:2px solid #fff;cursor:pointer;background:' + c; d.onclick = () => { bi = k; paint(); }; sw.append(d); });
+  x.onclick = () => o.remove(); top.append(x); ok.style.margin = '10px';
+  ok.onclick = async () => {
+    const t = ta.value.trim(); if (!t) return toast('اكتب شي أول');
+    ok.disabled = true;
+    try { await api('/rest/v1/statuses', { method: 'POST', body: JSON.stringify({ kind: 'text', body: t, bg: SBG[bi] }) }); o.remove(); done(); }
+    catch (e) { ok.disabled = false; toast(e.message); }
+  };
+  o.append(top, ta, sw, ok); paint(); document.body.append(o); ta.focus();
+}
+function openSv(list, own) {
+  let i = 0, tm = null;
+  const pr = list[0].profiles || {}, name = own ? 'حالتي' : (pr.name || pr.phone || 'مستخدم');
+  const o = el('div', 'sv'), bars = el('div', 'bars'), top = el('div', 'top'), body = el('div', 'body'), nm = el('div', 'grow'), xb = el('button', '', '✕');
+  const close = () => { clearTimeout(tm); o.remove(); viewStatus(); };
+  const bs = list.map(() => { const q = el('i'), b = el('b'); q.append(b); bars.append(q); return b; });
+  top.append(avatar(name, own ? PROF.avatar_path : pr.avatar_path), nm);
+  if (own) {
+    const db = el('button', '', '🗑');
+    db.onclick = async ev => { ev.stopPropagation(); if (!confirm('تحذف هالحالة؟')) return; clearTimeout(tm); try { await stDel(list[i]); close(); } catch (e) { toast(e.message); show(); } };
+    top.append(db);
+  }
+  xb.onclick = close; top.append(xb);
+  const show = () => {
+    clearTimeout(tm);
+    if (i >= list.length) return close();
+    const x = list[i]; SEEN[x.id] = 1; seenSave();
+    bs.forEach((b, k) => { b.style.animation = 'none'; b.style.width = k < i ? '100%' : '0'; });
+    void body.offsetWidth; bs[i].style.animation = 'sp 5s linear forwards';
+    nm.textContent = name + ' · ' + ago(x.created_at);
+    body.replaceChildren(); body.style.background = x.kind === 'text' ? x.bg : '#000';
+    if (x.kind === 'image') { const im = new Image(); im.alt = ''; im.src = ST(x.media_path); body.append(im); if (x.body) body.append(el('div', 'cap', x.body)); }
+    else body.append(el('div', '', x.body));
+    tm = setTimeout(() => { i++; show(); }, 5000);
+  };
+  body.onclick = () => { i++; show(); };
+  o.append(bars, top, body); document.body.append(o); show();
+}
+async function viewStatus() {
+  const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
+  try {
+    const rows = await api('/rest/v1/statuses?select=id,user_id,kind,body,media_path,bg,created_at,expires_at,profiles(name,phone,avatar_path)&order=created_at.asc');
+    const now = Date.now(), live = [];
+    rows.forEach(x => { if (new Date(x.expires_at) > now) live.push(x); else if (x.user_id === ME.id) stDel(x).catch(() => {}); });
+    const by = {}; live.forEach(x => { (by[x.user_id] = by[x.user_id] || []).push(x); });
+    const mine = by[ME.id] || []; delete by[ME.id];
+    const my = el('button', 'row'); my.append(avatar(PROF.name || 'أنا', PROF.avatar_path), el('div', 'grow', 'حالتي'), el('span', 'mut', mine.length ? mine.length + ' · ' + ago(mine[mine.length - 1].created_at) : 'لا يوجد'));
+    my.onclick = () => { if (mine.length) openSv(mine, true); else toast('اضغط 📷 أو ✏️ لإضافة حالة'); };
+    const acts = el('div'), ph = el('button', 'btn', '📷 صورة'), tx = el('button', 'btn', '✏️ نص'), fi = el('input');
+    acts.style.cssText = 'display:flex;gap:10px'; fi.type = 'file'; fi.accept = 'image/*'; fi.hidden = true;
+    acts.append(ph, tx, fi);
+    ph.onclick = () => fi.click();
+    tx.onclick = () => textEditor(viewStatus);
+    fi.onchange = async () => {
+      const f = fi.files[0]; fi.value = ''; if (!f) return;
+      const cap = prompt('تعليق (اختياري)'); if (cap === null) return;
+      try {
+        toast('جارٍ النشر…');
+        const blob = await compress(f), path = ME.id + '/' + crypto.randomUUID() + '.jpg';
+        const r = await raw('/storage/v1/object/statuses/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        if (!r.ok) throw new Error('تعذّر رفع الصورة');
+        await api('/rest/v1/statuses', { method: 'POST', body: JSON.stringify({ kind: 'image', media_path: path, body: cap.trim() || null }) });
+        toast('تم نشر الحالة ✓'); viewStatus();
+      } catch (e) { toast(e.message || 'تعذّر النشر'); }
+    };
+    const list = el('div'); list.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    Object.values(by).sort((a, b) => b[b.length - 1].created_at.localeCompare(a[a.length - 1].created_at)).forEach(g => {
+      const p = g[0].profiles || {}, nm = p.name || p.phone || 'مستخدم', fresh = g.some(x => !SEEN[x.id]);
+      const b = el('button', 'row'), a = avatar(nm, p.avatar_path); if (fresh) a.style.outline = '3px solid var(--acc)'; a.style.outlineOffset = '2px';
+      b.append(a, el('div', 'grow', nm), el('span', 'mut', ago(g[g.length - 1].created_at)));
+      b.onclick = () => openSv(g, false); list.append(b);
+    });
+    v.replaceChildren(my, acts, el('p', 'mut', 'حالات الأصدقاء (24 ساعة)'), list.children.length ? list : empty('ما في حالات جديدة', 'لما حدا من أصدقائك ينشر حالة بتظهر هون.'));
+  } catch (e) { v.replaceChildren(empty('تعذّر تحميل الحالات', e.message)); }
 }
 
 /* ---------- Push ---------- */
