@@ -255,4 +255,629 @@ function rtStart(chatId, onChange, onTyping) {
     });
     HB = setInterval(() => send('phoenix', 'heartbeat', {}), 25000);
   };
-  w
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+    if (m.event === 'postgres_changes' && CHAT === chatId) onChange();
+    if (m.event === 'broadcast' && m.payload && m.payload.event === 'typing' && m.payload.payload && m.payload.payload.uid !== ME.id && CHAT === chatId && onTyping) onTyping();
+  };
+  ws.onclose = () => { clearInterval(HB); if (CHAT === chatId) setTimeout(() => { if (CHAT === chatId) rtStart(chatId, onChange, onTyping); }, 3000); };
+}
+
+function rtTyping() {
+  if (WS && WS.readyState === 1 && CHAT) WS.send(JSON.stringify({ topic: 'realtime:chat-' + CHAT, event: 'broadcast', payload: { type: 'broadcast', event: 'typing', payload: { uid: ME.id } }, ref: String(++WSREF) }));
+}
+function seenText(ts) {
+  if (!ts) return '';
+  const d = new Date(ts), now = new Date();
+  if ((now - d) / 1000 < 120) return 'متصل الآن';
+  const t = d.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
+  const day = d.toDateString() === now.toDateString() ? 'اليوم' : d.toDateString() === new Date(now - 864e5).toDateString() ? 'أمس' : d.toLocaleDateString('ar');
+  return 'آخر ظهور ' + day + ' ' + t;
+}
+let PRES = null, STOPREC = null;
+function ping() { if (ME && S) api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ last_seen: PROF.hide_last_seen ? null : new Date().toISOString() }) }).catch(() => {}); }
+function startPresence() { clearInterval(PRES); PRES = setInterval(() => { if (!document.hidden) ping(); }, 45000); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { ping(); pollCalls(); } });
+
+/* ---------- App views ---------- */
+function tab(n) {
+  if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = ''; $('#callbtn').hidden = true; $('#infobtn').hidden = true;
+  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
+  $('#title').textContent = { chats: 'المحادثات', status: 'الحالة', new: 'محادثة جديدة', me: 'حسابي' }[n];
+  ({ chats: viewChats, status: viewStatus, new: viewNew, me: viewMe })[n]();
+}
+document.querySelectorAll('.nav button').forEach(b => b.onclick = () => tab(b.dataset.t));
+const empty = (a, b) => { const d = el('div', 'empty'); d.append(el('b', '', a), el('p', 'mut', b)); return d; };
+
+const IMG = {};
+async function imgUrl(path) {
+  if (IMG[path]) return IMG[path];
+  const r = await raw('/storage/v1/object/authenticated/chat-media/' + path);
+  if (!r.ok) throw new Error('img');
+  return (IMG[path] = URL.createObjectURL(await r.blob()));
+}
+function compress(f) {
+  return new Promise((ok, no) => {
+    const im = new Image(), u = URL.createObjectURL(f);
+    im.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); c.toBlob(bl => bl ? ok(bl) : no(new Error('x')), 'image/jpeg', 0.75);
+    };
+    im.onerror = () => no(new Error('الملف ليس صورة صالحة')); im.src = u;
+  });
+}
+function markRead(id) {
+  api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=eq.${ME.id}`, { method: 'PATCH', body: JSON.stringify({ last_read_at: new Date().toISOString() }) }).catch(() => {});
+}
+function msgEl(x, readAt) {
+  const mine = x.sender_id === ME.id, d = el('div', 'msg ' + (mine ? 'me' : 'th'));
+  if (x.kind === 'image') {
+    const im = el('img'); im.alt = 'صورة';
+    imgUrl(x.body).then(u => { im.src = u; }).catch(() => { im.alt = 'تعذّر تحميل الصورة'; });
+    d.append(im);
+  } else if (x.kind === 'audio') {
+    const a = el('audio'); a.controls = true; a.preload = 'metadata'; a.style.cssText = 'width:230px;max-width:100%';
+    imgUrl(x.body).then(u => { a.src = u; }).catch(() => {});
+    d.append(a);
+  } else d.append(document.createTextNode(x.body || ''));
+  if (mine) d.append(el('span', 'tick', readAt && readAt >= x.created_at ? '✔✔' : '✔'));
+  return d;
+}
+
+const RXS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+function prevTxt(x) { return x.kind === 'image' ? '📷 صورة' : x.kind === 'audio' ? '🎤 رسالة صوتية' : String(x.body || '').slice(0, 60); }
+function drawRx(e, list) {
+  let b = e.querySelector('.rx');
+  if (!list.length) { if (b) b.remove(); return; }
+  if (!b) { b = el('div', 'rx'); e.append(b); }
+  const g = {}; list.forEach(r => { const o = g[r.emoji] = g[r.emoji] || { n: 0, me: false }; o.n++; if (r.user_id === ME.id) o.me = true; });
+  b.replaceChildren(...Object.keys(g).map(k => el('span', 'chip' + (g[k].me ? ' me' : ''), k + (g[k].n > 1 ? ' ' + g[k].n : ''))));
+}
+function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete) {
+  document.querySelectorAll('.rxpick').forEach(x => x.remove());
+  const p = el('div', 'rxpick');
+  RXS.forEach(k => {
+    const b = el('button', '', k);
+    b.onclick = async ev => {
+      ev.stopPropagation(); p.remove();
+      try {
+        if (cur === k) await api('/rest/v1/message_reactions?message_id=eq.' + msgId + '&user_id=eq.' + ME.id, { method: 'DELETE' });
+        else await api('/rest/v1/message_reactions?on_conflict=message_id,user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ message_id: msgId, chat_id: chatId, emoji: k }) });
+        done();
+      } catch (e) { toast(e.message); }
+    };
+    p.append(b);
+  });
+  if (onReply) { const rb = el('button', 'rp', 'رد'); rb.onclick = ev => { ev.stopPropagation(); p.remove(); onReply(); }; p.append(rb); }
+  if (onDelete) { const db = el('button', 'del', 'حذف'); db.onclick = ev => { ev.stopPropagation(); p.remove(); onDelete(); }; p.append(db); }
+  anchor.append(p);
+}
+async function viewChats() {
+  const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
+  try {
+    const rows = await api('/rest/v1/chat_members?select=chat_id,user_id,last_read_at,profiles(name,phone,avatar_path)');
+    const by = {}, mine = {};
+    rows.forEach(r => { (by[r.chat_id] = by[r.chat_id] || []).push(r); if (r.user_id === ME.id) mine[r.chat_id] = r.last_read_at; });
+    const ids = Object.keys(by);
+    if (!ids.length) return v.replaceChildren(empty('لا توجد محادثات بعد', 'ابدأ أول محادثة من تبويب «جديد».'));
+    const G = {};
+    try { (await api('/rest/v1/chats?select=id,is_group,title')).forEach(c => { G[c.id] = c; }); } catch (e) {}
+    const unread = {};
+    try {
+      const ms = await api('/rest/v1/messages?select=chat_id,created_at&sender_id=neq.' + ME.id + '&order=created_at.desc&limit=500');
+      ms.forEach(m => { if (mine[m.chat_id] && m.created_at > mine[m.chat_id]) unread[m.chat_id] = (unread[m.chat_id] || 0) + 1; });
+    } catch (e) {}
+    const q = el('input'), list = el('div');
+    q.placeholder = 'ابحث في المحادثات…'; list.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    const items = ids.map(id => {
+      const g = G[id] && G[id].is_group ? G[id] : null;
+      const oth = by[id].filter(r => r.user_id !== ME.id);
+      const pn = r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم';
+      const names = g ? (g.title || 'مجموعة') : (oth.map(pn).join('، ') || 'ملاحظاتي');
+      const b = el('button', 'row'); b.dataset.n = names.toLowerCase();
+      const dm = !g && oth.length === 1;
+      b.append(avatar(names, dm && oth[0].profiles ? oth[0].profiles.avatar_path : null), el('div', 'grow', names));
+      if (unread[id]) b.append(el('span', 'badge', unread[id]));
+      const mem = {}; by[id].forEach(r => { mem[r.user_id] = pn(r); });
+      b.onclick = () => openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem } : null); return b;
+    });
+    list.append(...items);
+    q.oninput = () => { const t = q.value.trim().toLowerCase(); items.forEach(b => { b.hidden = !b.dataset.n.includes(t); }); };
+    v.replaceChildren(q, list);
+  } catch (e) { v.replaceChildren(empty('تعذّر تحميل المحادثات', e.message)); }
+}
+
+function openChat(id, name, otherId, grp) {
+  CHAT = id; $('#title').textContent = name;
+  const cbtn = $('#callbtn'); cbtn.hidden = false; cbtn.onclick = () => startCall(id, name);
+  if (grp) $('#sub').textContent = 'مجموعة · ' + Object.keys(grp.members).length + ' أعضاء';
+  const ibtn = $('#infobtn'); ibtn.hidden = !grp; if (grp) ibtn.onclick = () => groupInfo(id, name, grp);
+  const v = $('#view'), box = el('div', 'msgs'), bar = el('div', 'bar'), inp = el('input'),
+        send = el('button', 'btn', 'إرسال'), att = el('button', 'btn ghost att', '📷'), mic = el('button', 'btn ghost att', '🎤'), cancel = el('button', 'btn ghost att', '✖'), file = el('input');
+  file.type = 'file'; file.accept = 'image/*'; file.hidden = true; att.onclick = () => file.click();
+  inp.placeholder = 'اكتب رسالة…'; bar.append(att, mic, inp, send, cancel, file); cancel.hidden = true;
+  const typ = el('div', 'mut'); typ.style.cssText = 'min-height:18px;font-size:.82rem'; let reply = null; const rbar = el('div', 'rbar'), rtx = el('span'), rcl = el('button', '', '✖'); rbar.append(rtx, rcl); rbar.hidden = true;
+  const rp = () => (reply ? { reply_to: reply } : {});
+  const clearReply = () => { reply = null; rbar.hidden = true; };
+  const setReply = x => { reply = x.id; rtx.textContent = '↩️ ' + prevTxt(x); rbar.hidden = false; inp.focus(); };
+  rcl.onclick = clearReply;
+  const delMsg = async x => {
+    if (!confirm('تحذف هالرسالة للجميع؟')) return;
+    try {
+      const r = await api('/rest/v1/messages?id=eq.' + x.id, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+      if (!r || !r.length) throw new Error('ما فيك تحذف هالرسالة');
+      if (reply === x.id) clearReply();
+      load();
+    } catch (e) { toast(e.message); }
+  };
+  v.replaceChildren(box, typ, rbar, bar);
+  let tt, lastT = 0;
+  const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
+  inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
+  let seen = -1, RX = {}; const els = {};
+  const load = async () => {
+    if (CHAT !== id) return;
+    try {
+      const [m, mem, rx] = await Promise.all([
+        api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at,reply_to`),
+        api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`),
+        api(`/rest/v1/message_reactions?chat_id=eq.${id}&select=message_id,user_id,emoji`).catch(() => [])
+      ]);
+      RX = {}; rx.forEach(r => { (RX[r.message_id] = RX[r.message_id] || []).push(r); });
+      const lr = r => r.last_read_at || '';
+      const readAt = grp ? (mem.length ? mem.reduce((a, r) => (lr(r) < a ? lr(r) : a), lr(mem[0])) : '') : mem.reduce((a, r) => (lr(r) > a ? lr(r) : a), '');
+      if (otherId && !PROF.hide_last_seen) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
+      const byId = {}; m.forEach(x => { byId[x.id] = x; });
+      const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120 || !box.dataset.s;
+      m.forEach(x => {
+        let e = els[x.id];
+        if (!e) {
+          e = els[x.id] = msgEl(x, readAt); box.append(e);
+          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x), x.sender_id === ME.id ? () => delMsg(x) : null); };
+          if (x.reply_to) { const o = byId[x.reply_to], q = el('div', 'quote', o ? prevTxt(o) : 'رسالة محذوفة'); q.onclick = ev => { ev.stopPropagation(); const t = els[x.reply_to]; if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }; e.prepend(q); }
+          if (grp && x.sender_id !== ME.id) e.prepend(el('div', 'sname', grp.members[x.sender_id] || 'مستخدم'));
+        }
+        drawRx(e, RX[x.id] || []);
+        const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
+      });
+      Object.keys(els).forEach(k => { if (!byId[k]) { els[k].remove(); delete els[k]; } });
+      if (near) { box.scrollTop = box.scrollHeight; box.dataset.s = 1; }
+      if (m.length !== seen) { seen = m.length; markRead(id); }
+    } catch (e) {}
+  };
+  const go = async () => {
+    const t = inp.value.trim(); if (!t) return; inp.value = '';
+    try { await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, body: t, ...rp() }) }); clearReply(); load(); }
+    catch (e) { toast(e.message); inp.value = t; }
+  };
+  file.onchange = async () => {
+    const f = file.files[0]; file.value = ''; if (!f) return;
+    try {
+      toast('جارٍ إرسال الصورة…');
+      const blob = await compress(f), path = id + '/' + crypto.randomUUID() + '.jpg';
+      const r = await raw('/storage/v1/object/chat-media/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+      if (!r.ok) throw new Error('تعذّر رفع الصورة');
+      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'image', body: path, ...rp() }) }); clearReply();
+      load();
+    } catch (e) { toast(e.message || 'تعذّر إرسال الصورة'); }
+  };
+  let rec = null, chunks = [], timer = null, t0 = 0, cancelled = false;
+  const resetUI = () => { clearInterval(timer); mic.textContent = '🎤'; cancel.hidden = true; inp.disabled = send.disabled = att.disabled = false; typ.textContent = ''; };
+  const sendAudio = async (blob, type) => {
+    try {
+      if (blob.size > 4.5e6) throw new Error('التسجيل كبير جداً');
+      toast('جارٍ إرسال التسجيل…');
+      const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : type.includes('mpeg') ? 'mp3' : 'webm';
+      const path = id + '/' + crypto.randomUUID() + '.' + ext;
+      const r = await raw('/storage/v1/object/chat-media/' + path, { method: 'POST', headers: { 'Content-Type': type }, body: blob });
+      if (!r.ok) throw new Error('تعذّر رفع التسجيل');
+      await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, kind: 'audio', body: path, ...rp() }) }); clearReply();
+      load();
+    } catch (e) { toast(e.message || 'تعذّر إرسال التسجيل'); }
+  };
+  mic.onclick = async () => {
+    if (rec) { rec.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+      chunks = []; cancelled = false;
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const type = (rec.mimeType || mime || 'audio/webm').split(';')[0];
+        rec = null; resetUI();
+        if (!cancelled && chunks.length) await sendAudio(new Blob(chunks, { type }), type);
+      };
+      rec.start(); t0 = Date.now(); mic.textContent = '⬆️'; cancel.hidden = false; inp.disabled = send.disabled = att.disabled = true;
+      timer = setInterval(() => {
+        const sec = Math.floor((Date.now() - t0) / 1000);
+        typ.textContent = '🔴 يسجّل ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + ' — اضغط ⬆️ للإرسال';
+        if (sec >= 120 && rec) rec.stop();
+      }, 500);
+    } catch (e) { toast('تعذّر الوصول للمايكروفون، اسمح له من إعدادات المتصفح'); }
+  };
+  cancel.onclick = () => { cancelled = true; if (rec) rec.stop(); };
+  STOPREC = cancel.onclick;
+  send.onclick = go; inp.onkeydown = e => { if (e.key === 'Enter') go(); };
+  load(); POLL = setInterval(load, 10000); rtStart(id, load, showTyping); inp.focus();
+}
+
+async function groupInfo(id, name, grp) {
+  const o = el('div', 'ginfo'), top = el('div', 'gtop'), x = el('button', 'lnk', '✖ إغلاق'), list = el('div'), add = el('div', 'gadd'), pi = el('input'), pb = el('button', 'btn', 'إضافة'), lv = el('button', 'btn ghost', 'مغادرة المجموعة');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  top.append(el('b', '', name), x); pi.placeholder = 'رقم هاتف العضو الجديد'; pi.inputMode = 'tel'; pi.dir = 'ltr'; add.append(pi, pb);
+  o.append(top, el('p', 'mut', 'الأعضاء'), list, add, lv); document.body.append(o);
+  x.onclick = () => o.remove();
+  let owner = null, rows = [];
+  const subUpd = () => { if (CHAT === id) $('#sub').textContent = 'مجموعة · ' + Object.keys(grp.members).length + ' أعضاء'; };
+  const draw = () => {
+    const can = !owner || owner === ME.id;
+    list.replaceChildren(...rows.map(r => {
+      const nm = (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم', me = r.user_id === ME.id;
+      const d = el('div', 'gmem'); d.append(avatar(nm, r.profiles ? r.profiles.avatar_path : null), el('div', 'grow', nm + (me ? ' (أنت)' : '') + (owner === r.user_id ? ' 👑' : '')));
+      if (can && !me) {
+        const rm = el('button', 'rm', '✖'); rm.title = 'إزالة';
+        rm.onclick = async () => {
+          if (!confirm('تشيل ' + nm + ' من المجموعة؟')) return;
+          try {
+            await api('/rest/v1/rpc/group_remove_member', { method: 'POST', body: JSON.stringify({ p_chat: id, p_user: r.user_id }) });
+            rows = rows.filter(q => q.user_id !== r.user_id); delete grp.members[r.user_id]; draw(); subUpd();
+          } catch (e) { toast(e.message); }
+        };
+        d.append(rm);
+      }
+      return d;
+    }));
+  };
+  try {
+    const [m, ch] = await Promise.all([
+      api('/rest/v1/chat_members?chat_id=eq.' + id + '&select=user_id,profiles(name,phone,avatar_path)'),
+      api('/rest/v1/chats?id=eq.' + id + '&select=created_by').catch(() => [])
+    ]);
+    rows = m; owner = ch[0] && ch[0].created_by || null; draw();
+  } catch (e) { toast(e.message); }
+  pb.onclick = async () => {
+    const p = clean(pi.value); if (!p) return;
+    try {
+      const r = await api('/rest/v1/profiles?phone=eq.' + encodeURIComponent(p) + '&select=id,name,phone,avatar_path');
+      if (!r.length) return toast('لا يوجد مستخدم بهذا الرقم');
+      if (rows.some(q => q.user_id === r[0].id)) return toast('موجود بالمجموعة أصلاً');
+      await api('/rest/v1/rpc/group_add_member', { method: 'POST', body: JSON.stringify({ p_chat: id, p_user: r[0].id }) });
+      rows.push({ user_id: r[0].id, profiles: r[0] }); grp.members[r[0].id] = r[0].name || r[0].phone; pi.value = ''; draw(); subUpd(); toast('انضاف ✔');
+    } catch (e) { toast(e.message); }
+  };
+  lv.onclick = async () => {
+    if (!confirm('بدك تغادر المجموعة؟')) return;
+    try {
+      await api('/rest/v1/rpc/group_leave', { method: 'POST', body: JSON.stringify({ p_chat: id }) });
+      o.remove(); tab('chats');
+    } catch (e) { toast(e.message); }
+  };
+}
+
+function viewNew() {
+  const v = $('#view'), i = el('input'), b = el('button', 'btn', 'ابدأ المحادثة');
+  i.placeholder = 'رقم هاتف الشخص'; i.inputMode = 'tel'; i.dir = 'ltr';
+  const gt = el('p', 'mut', 'أو أنشئ مجموعة:'), gn = el('input'), gp = el('input'), ga = el('button', 'btn', 'إضافة عضو'), gl = el('div', 'rx'), gb = el('button', 'btn', 'إنشاء المجموعة');
+  gn.placeholder = 'اسم المجموعة'; gp.placeholder = 'رقم هاتف عضو'; gp.inputMode = 'tel'; gp.dir = 'ltr';
+  const gm = [];
+  const gdraw = () => gl.replaceChildren(...gm.map((m, k) => { const c = el('span', 'chip', (m.name || m.phone) + ' ✖'); c.style.cursor = 'pointer'; c.onclick = () => { gm.splice(k, 1); gdraw(); }; return c; }));
+  ga.onclick = async () => {
+    const p = clean(gp.value); if (!p) return;
+    try {
+      const r = await api('/rest/v1/profiles?phone=eq.' + encodeURIComponent(p) + '&select=id,name,phone');
+      if (!r.length) return toast('لا يوجد مستخدم بهذا الرقم');
+      if (r[0].id === ME.id) return toast('أنت موجود بالمجموعة أصلاً 🙂');
+      if (gm.some(m => m.id === r[0].id)) return toast('تمت إضافته من قبل');
+      gm.push(r[0]); gp.value = ''; gdraw();
+    } catch (e) { toast(e.message); }
+  };
+  gb.onclick = async () => {
+    const title = gn.value.trim();
+    if (!title) return toast('اكتب اسم المجموعة');
+    if (gm.length < 2) return toast('أضف عضوين على الأقل');
+    try {
+      const id = crypto.randomUUID();
+      await api('/rest/v1/chats', { method: 'POST', body: JSON.stringify({ id, is_group: true, title }) });
+      await api('/rest/v1/chat_members', { method: 'POST', body: JSON.stringify({ chat_id: id, user_id: ME.id }) });
+      await api('/rest/v1/chat_members', { method: 'POST', body: JSON.stringify(gm.map(m => ({ chat_id: id, user_id: m.id }))) });
+      const members = {}; members[ME.id] = 'أنا'; gm.forEach(m => { members[m.id] = m.name || m.phone; });
+      openChat(id, title, null, { members });
+    } catch (e) { toast(e.message); }
+  };
+  v.replaceChildren(el('p', 'mut', 'ابحث عن صديق برقم هاتفه المسجّل في حسابه.'), i, b, gt, gn, gp, ga, gl, gb);
+  b.onclick = async () => {
+    const p = clean(i.value); if (!p) return;
+    try {
+      const r = await api('/rest/v1/profiles?phone=eq.' + encodeURIComponent(p) + '&select=id,name,phone');
+      if (!r.length) return toast('لا يوجد مستخدم بهذا الرقم');
+      if (r[0].id === ME.id) return toast('هذا رقمك أنت 🙂');
+      const id = crypto.randomUUID();
+      await api('/rest/v1/chats', { method: 'POST', body: JSON.stringify({ id }) });
+      await api('/rest/v1/chat_members', { method: 'POST', body: JSON.stringify({ chat_id: id, user_id: ME.id }) });
+      await api('/rest/v1/chat_members', { method: 'POST', body: JSON.stringify({ chat_id: id, user_id: r[0].id }) });
+      openChat(id, r[0].name || r[0].phone, r[0].id);
+    } catch (e) { toast(e.message); }
+  };
+}
+
+async function viewMe() {
+  const v = $('#view'); let p = {};
+  try { p = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone,avatar_path,hide_last_seen'))[0] || {}; } catch (e) {}
+  const n = el('input'), ph = el('input'), sv = el('button', 'btn', 'حفظ التغييرات'), out = el('button', 'btn ghost', 'تسجيل الخروج');
+  n.placeholder = 'الاسم'; n.value = p.name || ''; ph.placeholder = 'رقم الهاتف (ليجدك أصدقاؤك)'; ph.value = p.phone || ''; ph.inputMode = 'tel'; ph.dir = 'ltr';
+  const card = el('div', 'prof'); const av = avatar(p.name || ME.email || '?', p.avatar_path), pick = el('input'), chg = el('button', 'lnk', 'تغيير الصورة'), opt = el('label', 'opt'), hid = el('input');
+  pick.type = 'file'; pick.accept = 'image/*'; pick.hidden = true; chg.onclick = () => pick.click(); av.onclick = () => pick.click(); av.style.cursor = 'pointer';
+  hid.type = 'checkbox'; hid.checked = !!p.hide_last_seen; opt.append(el('span', '', 'إخفاء آخر ظهور (وإخفاء آخر ظهور الآخرين عنك)'), hid);
+  card.append(av, chg, el('div', 'mut', ME.email || ''), pick);
+  pick.onchange = async () => {
+    const f = pick.files[0]; pick.value = ''; if (!f) return;
+    try {
+      const blob = await squarePhoto(f), path = ME.id + '/avatar.jpg';
+      const r = await raw('/storage/v1/object/avatars/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob });
+      if (!r.ok) throw new Error('تعذّر رفع الصورة');
+      const ap = path + '?v=' + Date.now();
+      await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ avatar_path: ap }) });
+      PROF.avatar_path = ap; toast('تم تحديث الصورة ✓'); viewMe();
+    } catch (e) { toast(e.message); }
+  };
+  hid.onchange = async () => {
+    try {
+      await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ hide_last_seen: hid.checked, last_seen: hid.checked ? null : new Date().toISOString() }) });
+      PROF.hide_last_seen = hid.checked; toast(hid.checked ? 'تم إخفاء آخر ظهور' : 'تم إظهار آخر ظهور');
+    } catch (e) { hid.checked = !hid.checked; toast(e.message); }
+  };
+  const pb = el('button', 'btn', '🔔 تفعيل الإشعارات');
+  pb.onclick = async () => { try { await enablePush(); toast('تم تفعيل الإشعارات ✓'); } catch (e) { toast(e.message); } };
+  v.replaceChildren(card, n, ph, opt, pb, sv, out);
+  sv.onclick = async () => {
+    try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: n.value.trim(), phone: clean(ph.value) || null }) }); toast('تم الحفظ ✓'); }
+    catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
+  };
+  out.onclick = () => { save(null); ME = null; show('auth'); };
+}
+
+/* ---------- Status ---------- */
+const ST = p => CFG.url + '/storage/v1/object/public/statuses/' + p;
+const SBG = ['#128C7E', '#8E44AD', '#E67E22', '#2C3E50', '#C0392B'];
+let SEEN = {}; try { SEEN = JSON.parse(localStorage.getItem('seenSt') || '{}'); } catch (e) {}
+const seenSave = () => { try { localStorage.setItem('seenSt', JSON.stringify(SEEN)); } catch (e) {} };
+function ago(t) { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'الآن' : m < 60 ? 'قبل ' + m + ' د' : 'قبل ' + Math.round(m / 60) + ' س'; }
+const stDel = x => { if (x.media_path) raw('/storage/v1/object/statuses/' + x.media_path, { method: 'DELETE' }).catch(() => {}); return api('/rest/v1/statuses?id=eq.' + x.id, { method: 'DELETE' }); };
+function textEditor(done) {
+  let bi = 0;
+  const o = el('div', 'sv'), ta = el('textarea'), sw = el('div'), ok = el('button', 'btn', 'نشر'), x = el('button', '', '✕'), bar = el('div'), top = el('div', 'top');
+  const paint = () => { o.style.background = SBG[bi]; };
+  ta.placeholder = 'اكتب حالتك…'; ta.maxLength = 300;
+  ta.style.cssText = 'flex:1;background:transparent;border:0;outline:0;color:#fff;font-size:1.6rem;font-weight:700;font-family:inherit;text-align:center;resize:none;padding:24px';
+  sw.style.cssText = 'display:flex;gap:10px;justify-content:center;padding:10px';
+  SBG.forEach((c, k) => { const d = el('button'); d.style.cssText = 'width:30px;height:30px;border-radius:50%;border:2px solid #fff;cursor:pointer;background:' + c; d.onclick = () => { bi = k; paint(); }; sw.append(d); });
+  x.onclick = () => o.remove(); top.append(x); ok.style.margin = '10px';
+  ok.onclick = async () => {
+    const t = ta.value.trim(); if (!t) return toast('اكتب شي أول');
+    ok.disabled = true;
+    try { await api('/rest/v1/statuses', { method: 'POST', body: JSON.stringify({ kind: 'text', body: t, bg: SBG[bi] }) }); o.remove(); done(); }
+    catch (e) { ok.disabled = false; toast(e.message); }
+  };
+  o.append(top, ta, sw, ok); paint(); document.body.append(o); ta.focus();
+}
+function openSv(list, own) {
+  let i = 0, tm = null;
+  const pr = list[0].profiles || {}, name = own ? 'حالتي' : (pr.name || pr.phone || 'مستخدم');
+  const o = el('div', 'sv'), bars = el('div', 'bars'), top = el('div', 'top'), body = el('div', 'body'), nm = el('div', 'grow'), xb = el('button', '', '✕');
+  const close = () => { clearTimeout(tm); o.remove(); viewStatus(); };
+  const bs = list.map(() => { const q = el('i'), b = el('b'); q.append(b); bars.append(q); return b; });
+  top.append(avatar(name, own ? PROF.avatar_path : pr.avatar_path), nm);
+  if (own) {
+    const db = el('button', '', '🗑');
+    db.onclick = async ev => { ev.stopPropagation(); if (!confirm('تحذف هالحالة؟')) return; clearTimeout(tm); try { await stDel(list[i]); close(); } catch (e) { toast(e.message); show(); } };
+    top.append(db);
+  }
+  xb.onclick = close; top.append(xb);
+  const show = () => {
+    clearTimeout(tm);
+    if (i >= list.length) return close();
+    const x = list[i]; SEEN[x.id] = 1; seenSave();
+    bs.forEach((b, k) => { b.style.animation = 'none'; b.style.width = k < i ? '100%' : '0'; });
+    void body.offsetWidth; bs[i].style.animation = 'sp 5s linear forwards';
+    nm.textContent = name + ' · ' + ago(x.created_at);
+    body.replaceChildren(); body.style.background = x.kind === 'text' ? x.bg : '#000';
+    if (x.kind === 'image') { const im = new Image(); im.alt = ''; im.src = ST(x.media_path); body.append(im); if (x.body) body.append(el('div', 'cap', x.body)); }
+    else body.append(el('div', '', x.body));
+    tm = setTimeout(() => { i++; show(); }, 5000);
+  };
+  body.onclick = () => { i++; show(); };
+  o.append(bars, top, body); document.body.append(o); show();
+}
+async function viewStatus() {
+  const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
+  try {
+    const rows = await api('/rest/v1/statuses?select=id,user_id,kind,body,media_path,bg,created_at,expires_at,profiles(name,phone,avatar_path)&order=created_at.asc');
+    const now = Date.now(), live = [];
+    rows.forEach(x => { if (new Date(x.expires_at) > now) live.push(x); else if (x.user_id === ME.id) stDel(x).catch(() => {}); });
+    const by = {}; live.forEach(x => { (by[x.user_id] = by[x.user_id] || []).push(x); });
+    const mine = by[ME.id] || []; delete by[ME.id];
+    const my = el('button', 'row'); my.append(avatar(PROF.name || 'أنا', PROF.avatar_path), el('div', 'grow', 'حالتي'), el('span', 'mut', mine.length ? mine.length + ' · ' + ago(mine[mine.length - 1].created_at) : 'لا يوجد'));
+    my.onclick = () => { if (mine.length) openSv(mine, true); else toast('اضغط 📷 أو ✏️ لإضافة حالة'); };
+    const acts = el('div'), ph = el('button', 'btn', '📷 صورة'), tx = el('button', 'btn', '✏️ نص'), fi = el('input');
+    acts.style.cssText = 'display:flex;gap:10px'; fi.type = 'file'; fi.accept = 'image/*'; fi.hidden = true;
+    acts.append(ph, tx, fi);
+    ph.onclick = () => fi.click();
+    tx.onclick = () => textEditor(viewStatus);
+    fi.onchange = async () => {
+      const f = fi.files[0]; fi.value = ''; if (!f) return;
+      const cap = prompt('تعليق (اختياري)'); if (cap === null) return;
+      try {
+        toast('جارٍ النشر…');
+        const blob = await compress(f), path = ME.id + '/' + crypto.randomUUID() + '.jpg';
+        const r = await raw('/storage/v1/object/statuses/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        if (!r.ok) throw new Error('تعذّر رفع الصورة');
+        await api('/rest/v1/statuses', { method: 'POST', body: JSON.stringify({ kind: 'image', media_path: path, body: cap.trim() || null }) });
+        toast('تم نشر الحالة ✓'); viewStatus();
+      } catch (e) { toast(e.message || 'تعذّر النشر'); }
+    };
+    const list = el('div'); list.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    Object.values(by).sort((a, b) => b[b.length - 1].created_at.localeCompare(a[a.length - 1].created_at)).forEach(g => {
+      const p = g[0].profiles || {}, nm = p.name || p.phone || 'مستخدم', fresh = g.some(x => !SEEN[x.id]);
+      const b = el('button', 'row'), a = avatar(nm, p.avatar_path); if (fresh) a.style.outline = '3px solid var(--acc)'; a.style.outlineOffset = '2px';
+      b.append(a, el('div', 'grow', nm), el('span', 'mut', ago(g[g.length - 1].created_at)));
+      b.onclick = () => openSv(g, false); list.append(b);
+    });
+    v.replaceChildren(my, acts, el('p', 'mut', 'حالات الأصدقاء (24 ساعة)'), list.children.length ? list : empty('ما في حالات جديدة', 'لما حدا من أصدقائك ينشر حالة بتظهر هون.'));
+  } catch (e) { v.replaceChildren(empty('تعذّر تحميل الحالات', e.message)); }
+}
+
+/* ---------- Calls ---------- */
+let CALL = null, INC = null, AUTOANS = null; const DECL = new Set();
+function ringer(kind) {
+  let ctx, iv;
+  try { ctx = new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); } catch (e) { return () => {}; }
+  const beep = (f, t0, d) => {
+    try {
+      const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + t0;
+      o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.25, t + .02); g.gain.linearRampToValueAtTime(0, t + d);
+      o.start(t); o.stop(t + d + .05);
+    } catch (e) {}
+  };
+  const cycle = () => {
+    if (kind === 'in') { beep(880, 0, .35); beep(660, .4, .35); beep(880, .9, .35); beep(660, 1.3, .35); if (navigator.vibrate) navigator.vibrate([350, 100, 350, 100, 350]); }
+    else beep(425, 0, 1);
+  };
+  cycle(); iv = setInterval(cycle, kind === 'in' ? 2600 : 3000);
+  return () => { clearInterval(iv); try { ctx.close(); } catch (e) {} if (navigator.vibrate) navigator.vibrate(0); };
+}
+function loadLK() {
+  if (window.LivekitClient) return Promise.resolve();
+  return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/livekit-client@2.18.3/dist/livekit-client.umd.min.js'; sc.onload = res; sc.onerror = () => rej(new Error('تعذّر تحميل مكتبة المكالمات')); document.head.append(sc); });
+}
+async function endCallRow(id) {
+  try { await api('/rest/v1/calls?id=eq.' + id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'ended', ended_at: new Date().toISOString() }) }); } catch (e) {}
+}
+async function startCall(chatId, name, callId) {
+  if (CALL) return toast('أنت بمكالمة حالياً');
+  CALL = true;
+  const outgoing = !callId;
+  const box = el('div', 'callbox'), h = el('h2', '', name), st = el('div', 'mut', outgoing ? 'جاري الاتصال…' : 'جاري الاتصال…'), list = el('div', 'cl'), cb = el('div', 'cb'),
+        mute = el('button', '', '🎤'), end = el('button', 'end', '📴'), snd = el('button', 'btn', 'تفعيل الصوت');
+  snd.hidden = true; cb.append(mute, end); box.append(h, st, list, snd, cb); document.body.append(box);
+  const audios = []; let room = null, timer = null, pollT = null, ringT = null, stopRing = null, anyRemote = false, closing = false, declined = false;
+  const finish = async () => {
+    if (closing) return; closing = true;
+    clearInterval(timer); clearInterval(pollT); clearTimeout(ringT);
+    if (stopRing) { stopRing(); stopRing = null; }
+    const alone = !room || !room.remoteParticipants.size;
+    if (room) room.disconnect();
+    audios.forEach(a => a.remove()); box.remove(); CALL = null;
+    if (callId && alone) endCallRow(callId);
+    if (outgoing && callId && !anyRemote && !declined) api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: chatId, body: '📵 مكالمة فائتة' }) }).catch(() => {});
+  };
+  end.onclick = finish;
+  const draw = () => {
+    if (!room) return;
+    const sp = new Set(room.activeSpeakers.map(p => p.identity));
+    const all = [room.localParticipant, ...room.remoteParticipants.values()];
+    list.replaceChildren(...all.map(p => el('div', sp.has(p.identity) ? 'sp' : '', (p === room.localParticipant ? 'أنا' : (p.name || 'مستخدم')) + (sp.has(p.identity) ? ' 🔊' : ''))));
+  };
+  const onRemote = () => {
+    if (anyRemote) return; anyRemote = true;
+    if (stopRing) { stopRing(); stopRing = null; }
+    clearTimeout(ringT);
+    const t0 = Date.now();
+    timer = setInterval(() => { const x = Math.floor((Date.now() - t0) / 1000); st.textContent = 'متصل · ' + String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); }, 1000);
+    draw();
+  };
+  try {
+    await loadLK();
+    if (outgoing) {
+      const rows = await api('/rest/v1/calls', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ chat_id: chatId }) });
+      callId = rows[0].id; stopRing = ringer('out');
+    }
+    const r = await raw('/functions/v1/smart-worker', { method: 'POST', body: JSON.stringify({ chat_id: chatId }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.token) throw new Error('تعذّر بدء المكالمة (' + r.status + ')');
+    const L = window.LivekitClient; room = new L.Room({ adaptiveStream: true });
+    room.on(L.RoomEvent.TrackSubscribed, tr => { if (tr.kind === 'audio') { const a = tr.attach(); audios.push(a); document.body.append(a); } })
+      .on(L.RoomEvent.TrackUnsubscribed, tr => tr.detach().forEach(a => a.remove()))
+      .on(L.RoomEvent.ParticipantConnected, onRemote)
+      .on(L.RoomEvent.ParticipantDisconnected, () => { draw(); if (anyRemote && !room.remoteParticipants.size) { toast('انتهت المكالمة'); finish(); } })
+      .on(L.RoomEvent.ActiveSpeakersChanged, draw)
+      .on(L.RoomEvent.AudioPlaybackStatusChanged, () => { snd.hidden = room.canPlaybackAudio; })
+      .on(L.RoomEvent.Disconnected, finish);
+    snd.onclick = () => room.startAudio();
+    mute.onclick = async () => { const on = room.localParticipant.isMicrophoneEnabled; await room.localParticipant.setMicrophoneEnabled(!on); mute.textContent = on ? '🔇' : '🎤'; };
+    await room.connect(d.url, d.token);
+    await room.localParticipant.setMicrophoneEnabled(true);
+    if (!outgoing) api('/rest/v1/calls?id=eq.' + callId + '&status=eq.ringing', { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'active' }) }).catch(() => {});
+    draw();
+    if (room.remoteParticipants.size) onRemote();
+    else if (outgoing) {
+      st.textContent = 'جاري الرنين…';
+      pollT = setInterval(async () => {
+        if (anyRemote) return;
+        try { const x = await api('/rest/v1/calls?id=eq.' + callId + '&select=status'); if (x[0] && x[0].status === 'ended') { declined = true; toast('تم رفض المكالمة'); finish(); } } catch (e) {}
+      }, 2000);
+      ringT = setTimeout(() => { if (!anyRemote) { toast('ما في رد'); finish(); } }, 45000);
+    }
+  } catch (e) { toast(e.message); finish(); }
+}
+async function pollCalls() {
+  if (!S || !ME || CALL || INC || document.hidden) return;
+  try {
+    const since = new Date(Date.now() - 45000).toISOString();
+    const r = await api('/rest/v1/calls?status=eq.ringing&caller_id=neq.' + ME.id + '&created_at=gt.' + encodeURIComponent(since) + '&select=id,chat_id,profiles(name,phone)&order=created_at.desc&limit=3');
+    const c = r.find(x => !DECL.has(x.id)); if (c) showIncoming(c);
+  } catch (e) {}
+}
+async function showIncoming(c) {
+  INC = c.id;
+  const who = (c.profiles && (c.profiles.name || c.profiles.phone)) || 'مستخدم'; let title = who, sub = 'مكالمة صوتية واردة…', grp = false;
+  try { const ch = await api('/rest/v1/chats?id=eq.' + c.chat_id + '&select=is_group,title'); if (ch[0] && ch[0].is_group) { grp = true; title = ch[0].title || 'مجموعة'; sub = who + ' يتصل بالمجموعة…'; } } catch (e) {}
+  const box = el('div', 'callbox'), h = el('h2', '', title), s2 = el('div', 'mut', sub), cb = el('div', 'cb'), ok = el('button', 'ok', '📞'), no = el('button', 'end', '📴');
+  cb.append(no, ok); box.append(avatar(title, null), h, s2, cb); document.body.append(box);
+  const stopRing = ringer('in'), t0 = document.title; document.title = '📞 مكالمة واردة';
+  let poll = null, tmo = null;
+  const close = () => { clearInterval(poll); clearTimeout(tmo); stopRing(); box.remove(); INC = null; document.title = t0; };
+  ok.onclick = () => { close(); startCall(c.chat_id, title, c.id); };
+  no.onclick = () => { DECL.add(c.id); close(); if (!grp) endCallRow(c.id); };
+  tmo = setTimeout(() => { DECL.add(c.id); close(); }, 45000);
+  poll = setInterval(async () => { try { const x = await api('/rest/v1/calls?id=eq.' + c.id + '&select=status'); if (!x[0] || x[0].status !== 'ringing') { DECL.add(c.id); close(); } } catch (e) {} }, 2000);
+  if (AUTOANS === c.id) { AUTOANS = null; ok.onclick(); }
+}
+
+/* ---------- Push ---------- */
+const VAPID_PUB = 'BGT8t2_f8a6hbEq9h0MhGJo3ZJJAslAJXPWuJtuDPDsIqt9lVs-Eq93dnhDw5vIxfeUkJ6TJ7ELZ2zckfG7FOVQ';
+function b64u(s) { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); }
+async function enablePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('الجهاز ما بيدعم الإشعارات. على الآيفون ثبّت التطبيق أولاً.');
+  if (await Notification.requestPermission() !== 'granted') throw new Error('ما انعطت صلاحية الإشعارات');
+  const reg = await navigator.serviceWorker.ready;
+  const old = await reg.pushManager.getSubscription(); if (old) await old.unsubscribe();
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) });
+  const j = sub.toJSON();
+  await api('/rest/v1/push_subscriptions?on_conflict=endpoint', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_id: ME.id }) });
+}
+
+/* ---------- Boot ---------- */
+async function boot() {
+  if (location.hash.includes('access_token')) {
+    const p = new URLSearchParams(location.hash.slice(1));
+    if (p.get('access_token')) save({ access_token: p.get('access_token'), refresh_token: p.get('refresh_token') });
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  if (!S) return show('auth');
+  try { ME = await api('/auth/v1/user'); } catch (e) { save(null); return show('auth'); }
+  try { PROF = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone,avatar_path,hide_last_seen'))[0] || {}; } catch (e) { PROF = {}; }
+  show('app'); tab('chats'); ping(); startPresence();
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+{ const aq = new URLSearchParams(location.search).get('answer'); if (aq) { AUTOANS = aq; history.replaceState(null, '', location.pathname); } }
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', ev => { if (ev.data && ev.data.answer) { AUTOANS = ev.data.answer; pollCalls(); } });
+setInterval(pollCalls, 3000); setTimeout(pollCalls, 1500);
+boot();
+</script>
+</body>
+</html>
