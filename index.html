@@ -68,7 +68,7 @@ header b{font-size:1.1rem}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center;z-index:9}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .msg{cursor:pointer}.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chip{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 8px;font-size:.85rem}.chip.me{outline:1.5px solid var(--acc)}.rxpick{display:flex;gap:2px;margin-top:6px;background:var(--card);border-radius:16px;padding:4px;width:max-content;max-width:100%}.rxpick button{border:0;background:0;font-size:1.4rem;cursor:pointer;padding:2px 5px}
-.quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}#callbtn{margin-inline-start:auto;border:0;background:0;font-size:1.4rem;cursor:pointer}.callbox{position:fixed;inset:0;z-index:60;background:#0B1220;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}.callbox h2{margin:0}.cl{display:flex;flex-direction:column;gap:8px;min-width:220px}.cl div{background:rgba(255,255,255,.08);border-radius:12px;padding:8px 14px}.cl .sp{outline:2px solid var(--acc)}.cb{display:flex;gap:14px}.cb button{border:0;border-radius:50%;width:64px;height:64px;font-size:1.6rem;cursor:pointer;background:#2A3548;color:#fff}.cb .end{background:#D6334B}
+.quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}#callbtn{margin-inline-start:auto;border:0;background:0;font-size:1.4rem;cursor:pointer}.callbox{position:fixed;inset:0;z-index:60;background:#0B1220;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}.callbox h2{margin:0}.cl{display:flex;flex-direction:column;gap:8px;min-width:220px}.cl div{background:rgba(255,255,255,.08);border-radius:12px;padding:8px 14px}.cl .sp{outline:2px solid var(--acc)}.cb{display:flex;gap:14px}.cb button{border:0;border-radius:50%;width:64px;height:64px;font-size:1.6rem;cursor:pointer;background:#2A3548;color:#fff}.cb .end{background:#D6334B}.cb .ok{background:#1FA45B}
 .sname{font-size:.75rem;font-weight:700;color:var(--acc);margin-bottom:2px}.rxpick button.del{font-size:.9rem;font-weight:700;color:#D6334B}.rxpick button.rp{font-size:.9rem;font-weight:700;color:var(--pri)}
 @keyframes sp{to{width:100%}}.sv{position:fixed;inset:0;background:#000;z-index:50;display:flex;flex-direction:column;color:#fff}.sv .bars{display:flex;gap:4px;padding:10px 10px 4px}.sv .bars i{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden}.sv .bars b{display:block;height:100%;width:0;background:#fff}.sv .top{display:flex;align-items:center;gap:10px;padding:6px 12px}.sv .grow{flex:1}.sv .body{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;font-size:1.6rem;font-weight:700;overflow:hidden;position:relative;cursor:pointer}.sv .body img{max-width:100%;max-height:100%;object-fit:contain}.sv .cap{position:absolute;bottom:0;left:0;right:0;padding:12px 16px;background:rgba(0,0,0,.55);font-size:1rem;font-weight:400}.sv>.top button{border:0;background:0;color:#fff;font-size:1.3rem;cursor:pointer}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
@@ -276,7 +276,7 @@ function seenText(ts) {
 let PRES = null, STOPREC = null;
 function ping() { if (ME && S) api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ last_seen: PROF.hide_last_seen ? null : new Date().toISOString() }) }).catch(() => {}); }
 function startPresence() { clearInterval(PRES); PRES = setInterval(() => { if (!document.hidden) ping(); }, 45000); }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { ping(); pollCalls(); } });
 
 /* ---------- App views ---------- */
 function tab(n) {
@@ -676,46 +676,121 @@ async function viewStatus() {
 }
 
 /* ---------- Calls ---------- */
-let CALL = null;
+let CALL = null, INC = null, AUTOANS = null; const DECL = new Set();
+function ringer(kind) {
+  let ctx, iv;
+  try { ctx = new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); } catch (e) { return () => {}; }
+  const beep = (f, t0, d) => {
+    try {
+      const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + t0;
+      o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.25, t + .02); g.gain.linearRampToValueAtTime(0, t + d);
+      o.start(t); o.stop(t + d + .05);
+    } catch (e) {}
+  };
+  const cycle = () => {
+    if (kind === 'in') { beep(880, 0, .35); beep(660, .4, .35); beep(880, .9, .35); beep(660, 1.3, .35); if (navigator.vibrate) navigator.vibrate([350, 100, 350, 100, 350]); }
+    else beep(425, 0, 1);
+  };
+  cycle(); iv = setInterval(cycle, kind === 'in' ? 2600 : 3000);
+  return () => { clearInterval(iv); try { ctx.close(); } catch (e) {} if (navigator.vibrate) navigator.vibrate(0); };
+}
 function loadLK() {
   if (window.LivekitClient) return Promise.resolve();
   return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/livekit-client@2.18.3/dist/livekit-client.umd.min.js'; sc.onload = res; sc.onerror = () => rej(new Error('تعذّر تحميل مكتبة المكالمات')); document.head.append(sc); });
 }
-async function startCall(chatId, name) {
+async function endCallRow(id) {
+  try { await api('/rest/v1/calls?id=eq.' + id, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'ended', ended_at: new Date().toISOString() }) }); } catch (e) {}
+}
+async function startCall(chatId, name, callId) {
   if (CALL) return toast('أنت بمكالمة حالياً');
   CALL = true;
-  const box = el('div', 'callbox'), h = el('h2', '', name), st = el('div', 'mut', 'جاري الاتصال…'), list = el('div', 'cl'), cb = el('div', 'cb'),
+  const outgoing = !callId;
+  const box = el('div', 'callbox'), h = el('h2', '', name), st = el('div', 'mut', outgoing ? 'جاري الاتصال…' : 'جاري الاتصال…'), list = el('div', 'cl'), cb = el('div', 'cb'),
         mute = el('button', '', '🎤'), end = el('button', 'end', '📴'), snd = el('button', 'btn', 'تفعيل الصوت');
   snd.hidden = true; cb.append(mute, end); box.append(h, st, list, snd, cb); document.body.append(box);
-  const audios = []; let room = null, timer = null;
-  const done = () => { clearInterval(timer); audios.forEach(a => a.remove()); box.remove(); CALL = null; };
-  end.onclick = () => { if (room) room.disconnect(); done(); };
+  const audios = []; let room = null, timer = null, pollT = null, ringT = null, stopRing = null, anyRemote = false, closing = false, declined = false;
+  const finish = async () => {
+    if (closing) return; closing = true;
+    clearInterval(timer); clearInterval(pollT); clearTimeout(ringT);
+    if (stopRing) { stopRing(); stopRing = null; }
+    const alone = !room || !room.remoteParticipants.size;
+    if (room) room.disconnect();
+    audios.forEach(a => a.remove()); box.remove(); CALL = null;
+    if (callId && alone) endCallRow(callId);
+    if (outgoing && callId && !anyRemote && !declined) api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: chatId, body: '📵 مكالمة فائتة' }) }).catch(() => {});
+  };
+  end.onclick = finish;
+  const draw = () => {
+    if (!room) return;
+    const sp = new Set(room.activeSpeakers.map(p => p.identity));
+    const all = [room.localParticipant, ...room.remoteParticipants.values()];
+    list.replaceChildren(...all.map(p => el('div', sp.has(p.identity) ? 'sp' : '', (p === room.localParticipant ? 'أنا' : (p.name || 'مستخدم')) + (sp.has(p.identity) ? ' 🔊' : ''))));
+  };
+  const onRemote = () => {
+    if (anyRemote) return; anyRemote = true;
+    if (stopRing) { stopRing(); stopRing = null; }
+    clearTimeout(ringT);
+    const t0 = Date.now();
+    timer = setInterval(() => { const x = Math.floor((Date.now() - t0) / 1000); st.textContent = 'متصل · ' + String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); }, 1000);
+    draw();
+  };
   try {
     await loadLK();
+    if (outgoing) {
+      const rows = await api('/rest/v1/calls', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ chat_id: chatId }) });
+      callId = rows[0].id; stopRing = ringer('out');
+    }
     const r = await raw('/functions/v1/smart-worker', { method: 'POST', body: JSON.stringify({ chat_id: chatId }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.token) throw new Error('تعذّر بدء المكالمة (' + r.status + ')');
     const L = window.LivekitClient; room = new L.Room({ adaptiveStream: true });
-    const draw = () => {
-      const sp = new Set(room.activeSpeakers.map(p => p.identity));
-      const all = [room.localParticipant, ...room.remoteParticipants.values()];
-      list.replaceChildren(...all.map(p => el('div', sp.has(p.identity) ? 'sp' : '', (p === room.localParticipant ? 'أنا' : (p.name || 'مستخدم')) + (sp.has(p.identity) ? ' 🔊' : ''))));
-    };
     room.on(L.RoomEvent.TrackSubscribed, tr => { if (tr.kind === 'audio') { const a = tr.attach(); audios.push(a); document.body.append(a); } })
       .on(L.RoomEvent.TrackUnsubscribed, tr => tr.detach().forEach(a => a.remove()))
-      .on(L.RoomEvent.ParticipantConnected, draw).on(L.RoomEvent.ParticipantDisconnected, draw)
+      .on(L.RoomEvent.ParticipantConnected, onRemote)
+      .on(L.RoomEvent.ParticipantDisconnected, () => { draw(); if (anyRemote && !room.remoteParticipants.size) { toast('انتهت المكالمة'); finish(); } })
       .on(L.RoomEvent.ActiveSpeakersChanged, draw)
       .on(L.RoomEvent.AudioPlaybackStatusChanged, () => { snd.hidden = room.canPlaybackAudio; })
-      .on(L.RoomEvent.Disconnected, done);
+      .on(L.RoomEvent.Disconnected, finish);
     snd.onclick = () => room.startAudio();
     mute.onclick = async () => { const on = room.localParticipant.isMicrophoneEnabled; await room.localParticipant.setMicrophoneEnabled(!on); mute.textContent = on ? '🔇' : '🎤'; };
     await room.connect(d.url, d.token);
     await room.localParticipant.setMicrophoneEnabled(true);
-    const t0 = Date.now();
-    timer = setInterval(() => { const x = Math.floor((Date.now() - t0) / 1000); st.textContent = 'متصل · ' + String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); }, 1000);
+    if (!outgoing) api('/rest/v1/calls?id=eq.' + callId + '&status=eq.ringing', { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'active' }) }).catch(() => {});
     draw();
-    if (!room.remoteParticipants.size) api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: chatId, body: '📞 بدأ مكالمة صوتية، اضغط 📞 بأعلى الشاشة للانضمام' }) }).catch(() => {});
-  } catch (e) { toast(e.message); if (room) room.disconnect(); done(); }
+    if (room.remoteParticipants.size) onRemote();
+    else if (outgoing) {
+      st.textContent = 'جاري الرنين…';
+      pollT = setInterval(async () => {
+        if (anyRemote) return;
+        try { const x = await api('/rest/v1/calls?id=eq.' + callId + '&select=status'); if (x[0] && x[0].status === 'ended') { declined = true; toast('تم رفض المكالمة'); finish(); } } catch (e) {}
+      }, 2000);
+      ringT = setTimeout(() => { if (!anyRemote) { toast('ما في رد'); finish(); } }, 45000);
+    }
+  } catch (e) { toast(e.message); finish(); }
+}
+async function pollCalls() {
+  if (!S || !ME || CALL || INC || document.hidden) return;
+  try {
+    const since = new Date(Date.now() - 45000).toISOString();
+    const r = await api('/rest/v1/calls?status=eq.ringing&caller_id=neq.' + ME.id + '&created_at=gt.' + encodeURIComponent(since) + '&select=id,chat_id,profiles(name,phone)&order=created_at.desc&limit=3');
+    const c = r.find(x => !DECL.has(x.id)); if (c) showIncoming(c);
+  } catch (e) {}
+}
+async function showIncoming(c) {
+  INC = c.id;
+  const who = (c.profiles && (c.profiles.name || c.profiles.phone)) || 'مستخدم'; let title = who, sub = 'مكالمة صوتية واردة…', grp = false;
+  try { const ch = await api('/rest/v1/chats?id=eq.' + c.chat_id + '&select=is_group,title'); if (ch[0] && ch[0].is_group) { grp = true; title = ch[0].title || 'مجموعة'; sub = who + ' يتصل بالمجموعة…'; } } catch (e) {}
+  const box = el('div', 'callbox'), h = el('h2', '', title), s2 = el('div', 'mut', sub), cb = el('div', 'cb'), ok = el('button', 'ok', '📞'), no = el('button', 'end', '📴');
+  cb.append(no, ok); box.append(avatar(title, null), h, s2, cb); document.body.append(box);
+  const stopRing = ringer('in'), t0 = document.title; document.title = '📞 مكالمة واردة';
+  let poll = null, tmo = null;
+  const close = () => { clearInterval(poll); clearTimeout(tmo); stopRing(); box.remove(); INC = null; document.title = t0; };
+  ok.onclick = () => { close(); startCall(c.chat_id, title, c.id); };
+  no.onclick = () => { DECL.add(c.id); close(); if (!grp) endCallRow(c.id); };
+  tmo = setTimeout(() => { DECL.add(c.id); close(); }, 45000);
+  poll = setInterval(async () => { try { const x = await api('/rest/v1/calls?id=eq.' + c.id + '&select=status'); if (!x[0] || x[0].status !== 'ringing') { DECL.add(c.id); close(); } } catch (e) {} }, 2000);
+  if (AUTOANS === c.id) { AUTOANS = null; ok.onclick(); }
 }
 
 /* ---------- Push ---------- */
@@ -744,6 +819,9 @@ async function boot() {
   show('app'); tab('chats'); ping(); startPresence();
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+{ const aq = new URLSearchParams(location.search).get('answer'); if (aq) { AUTOANS = aq; history.replaceState(null, '', location.pathname); } }
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', ev => { if (ev.data && ev.data.answer) { AUTOANS = ev.data.answer; pollCalls(); } });
+setInterval(pollCalls, 3000); setTimeout(pollCalls, 1500);
 boot();
 </script>
 </body>
