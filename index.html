@@ -80,6 +80,7 @@ header b{font-size:1.1rem}
 .bar .att{padding:0 12px;font-size:1.1rem}
 #infobtn{border:0;background:0;font-size:1.3rem;cursor:pointer}.ginfo{position:fixed;inset:0;z-index:55;background:var(--bg);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 16px calc(14px + env(safe-area-inset-bottom));gap:10px;overflow:auto}.ginfo .gtop{display:flex;align-items:center;justify-content:space-between;gap:10px}.ginfo .gmem{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:10px 12px}.ginfo .gmem .grow{flex:1;font-weight:600}.ginfo .gmem .rm{border:0;background:0;color:#D6334B;font-size:1.1rem;cursor:pointer}.ginfo .gadd{display:flex;gap:8px}.ginfo .gadd .btn{width:auto;padding:0 16px;white-space:nowrap}
 #vcallbtn{border:0;background:0;font-size:1.4rem;cursor:pointer}.callbox{overflow:auto}.vg{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%;max-width:680px}.vg:empty{display:none}.vt{position:relative;flex:1 1 44%;min-width:140px;background:#000;border-radius:14px;overflow:hidden}.vt video{width:100%;display:block;max-height:46vh;object-fit:cover}.vt span{position:absolute;bottom:6px;inset-inline-start:8px;color:#fff;font-size:.8rem;text-shadow:0 0 4px #000}.vt.mine video{transform:scaleX(-1)}
+.rwrap{flex:1;min-height:0;background:#000;display:flex;flex-direction:column;position:relative}.rf{flex:1;min-height:0;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none}.rf::-webkit-scrollbar{display:none}.rl{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;background:#000}.rl video{width:100%;height:100%;object-fit:contain;display:block}.rl .ov{position:absolute;inset-inline:0;bottom:0;padding:48px 70px 16px 14px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;pointer-events:none}.rl .who{display:flex;align-items:center;gap:8px;font-weight:700}.rl .cap{margin-top:6px;font-size:.92rem}.rl .acts{position:absolute;inset-inline-end:10px;bottom:90px;display:flex;flex-direction:column;gap:12px;align-items:center}.rl .acts button{border:0;background:rgba(0,0,0,.5);color:#fff;border-radius:24px;padding:8px 12px;font-size:1.05rem;cursor:pointer}.radd{position:absolute;top:10px;inset-inline-start:10px;z-index:5;border:0;border-radius:50%;width:44px;height:44px;background:var(--pri);color:#fff;font-size:1.3rem;cursor:pointer}.rmute{position:absolute;top:16px;inset-inline-end:14px;z-index:5;color:#fff;font-size:1.3rem;pointer-events:none;text-shadow:0 0 4px #000}.rcc{display:flex;gap:16px;justify-content:center;align-items:center;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}.rbig{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:#D6334B;cursor:pointer;padding:0}.rbig.on{border-radius:18px}.rtm{position:absolute;top:calc(12px + env(safe-area-inset-top));inset-inline:0;text-align:center;font-weight:700;color:#fff;text-shadow:0 0 4px #000;pointer-events:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -111,6 +112,7 @@ header b{font-size:1.1rem}
   <nav class="nav">
     <button data-t="chats"><span>💬</span>المحادثات</button>
     <button data-t="status"><span>🟢</span>الحالة</button>
+    <button data-t="reels"><span>🎬</span>ريلز</button>
     <button data-t="new"><span>➕</span>جديد</button>
     <button data-t="me"><span>👤</span>حسابي</button>
   </nav>
@@ -285,10 +287,11 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { pi
 
 /* ---------- App views ---------- */
 function tab(n) {
+  $('#view').style.cssText = '';
   if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = ''; $('#callbtn').hidden = true; $('#vcallbtn').hidden = true; $('#infobtn').hidden = true;
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
-  $('#title').textContent = { chats: 'المحادثات', status: 'الحالة', new: 'محادثة جديدة', me: 'حسابي' }[n];
-  ({ chats: viewChats, status: viewStatus, new: viewNew, me: viewMe })[n]();
+  $('#title').textContent = { chats: 'المحادثات', status: 'الحالة', reels: 'ريلز', new: 'محادثة جديدة', me: 'حسابي' }[n];
+  ({ chats: viewChats, status: viewStatus, reels: viewReels, new: viewNew, me: viewMe })[n]();
 }
 document.querySelectorAll('.nav button').forEach(b => b.onclick = () => tab(b.dataset.t));
 const empty = (a, b) => { const d = el('div', 'empty'); d.append(el('b', '', a), el('p', 'mut', b)); return d; };
@@ -656,6 +659,108 @@ async function viewMe() {
     catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
   };
   out.onclick = () => { save(null); ME = null; show('auth'); };
+}
+
+/* ---------- Reels ---------- */
+const RL = p => CFG.url + '/storage/v1/object/public/reels/' + p;
+const RMAXS = 30, RBYTES = 15 * 1024 * 1024; let RMUTE = true;
+const reelDel = x => { raw('/storage/v1/object/reels/' + x.media_path, { method: 'DELETE' }).catch(() => {}); return api('/rest/v1/reels?id=eq.' + x.id, { method: 'DELETE' }); };
+async function viewReels() {
+  const v = $('#view'); v.style.cssText = 'padding:0;gap:0;overflow:hidden';
+  v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
+  try {
+    const rows = await api('/rest/v1/reels?select=id,user_id,media_path,caption,created_at,expires_at,profiles(name,phone,avatar_path),reel_likes(user_id)&order=created_at.desc&limit=30');
+    const now = Date.now(), live = [];
+    rows.forEach(x => { if (new Date(x.expires_at) > now) live.push(x); else if (x.user_id === ME.id) reelDel(x).catch(() => {}); });
+    const wrap = el('div', 'rwrap'), add = el('button', 'radd', '➕'); add.onclick = () => reelRecorder(viewReels);
+    v.replaceChildren(wrap);
+    if (!live.length) { wrap.append(empty('ما في ريلز بعد', 'كن أول من ينشر ريل 🎬'), add); return; }
+    const feed = el('div', 'rf'), vids = [], mt = el('div', 'rmute', '🔇');
+    const io = new IntersectionObserver(es => es.forEach(e => { const vd = e.target.querySelector('video'); if (e.isIntersecting) vd.play().catch(() => {}); else vd.pause(); }), { root: feed, threshold: 0.7 });
+    live.forEach(x => {
+      const it = el('div', 'rl'), vd = el('video'), ov = el('div', 'ov'), who = el('div', 'who'), acts = el('div', 'acts');
+      vd.src = RL(x.media_path); vd.loop = true; vd.muted = RMUTE; vd.setAttribute('playsinline', ''); vd.preload = 'metadata'; vids.push(vd);
+      vd.onclick = () => { RMUTE = !RMUTE; vids.forEach(q => { q.muted = RMUTE; }); mt.textContent = RMUTE ? '🔇' : '🔊'; };
+      const nm = (x.profiles && (x.profiles.name || x.profiles.phone)) || 'مستخدم';
+      who.append(avatar(nm, x.profiles && x.profiles.avatar_path), el('span', '', nm)); ov.append(who); if (x.caption) ov.append(el('div', 'cap', x.caption));
+      const ls = new Set(x.reel_likes.map(l => l.user_id)), lk = el('button'), drawL = () => { lk.textContent = (ls.has(ME.id) ? '❤️ ' : '🤍 ') + ls.size; };
+      drawL();
+      lk.onclick = async () => {
+        const had = ls.has(ME.id); if (had) ls.delete(ME.id); else ls.add(ME.id); drawL();
+        try {
+          if (had) await api('/rest/v1/reel_likes?reel_id=eq.' + x.id + '&user_id=eq.' + ME.id, { method: 'DELETE' });
+          else await api('/rest/v1/reel_likes', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ reel_id: x.id }) });
+        } catch (e) { if (had) ls.add(ME.id); else ls.delete(ME.id); drawL(); toast(e.message); }
+      };
+      acts.append(lk);
+      if (x.user_id === ME.id) {
+        const d = el('button', '', '🗑'); d.onclick = async () => { if (!confirm('تحذف هالريل؟')) return; try { await reelDel(x); viewReels(); } catch (e) { toast(e.message); } }; acts.append(d);
+      } else {
+        const r = el('button', '', '🚩');
+        r.onclick = async () => {
+          if (!confirm('تبلّغ عن هالريل؟')) return;
+          try { await api('/rest/v1/reel_reports?on_conflict=reel_id,reporter_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify({ reel_id: x.id }) }); toast('وصل البلاغ، شكراً'); } catch (e) { toast(e.message); }
+        };
+        acts.append(r);
+      }
+      it.append(vd, ov, acts); feed.append(it); io.observe(it);
+    });
+    wrap.append(feed, mt, add);
+  } catch (e) { v.replaceChildren(el('p', 'empty', 'تعذّر تحميل الريلز')); }
+}
+function reelRecorder(done) {
+  const o = el('div', 'sv'), pv = el('video'), cc = el('div', 'rcc'), rec = el('button', 'rbig'), gal = el('button', 'btn ghost', '📁'), fl = el('button', 'btn ghost', '🔄'), x = el('button', 'btn ghost', '✕'), tm = el('div', 'rtm', '0:00'), fi = el('input');
+  fi.type = 'file'; fi.accept = 'video/*'; fi.hidden = true;
+  pv.muted = true; pv.autoplay = true; pv.setAttribute('playsinline', ''); pv.style.cssText = 'flex:1;min-height:0;width:100%;object-fit:cover';
+  cc.append(x, gal, rec, fl); o.append(pv, tm, cc, fi); document.body.append(o);
+  let st = null, mr = null, chunks = [], tick = null, facing = 'user', t0 = 0;
+  const stop = () => { clearInterval(tick); if (st) st.getTracks().forEach(t => t.stop()); st = null; };
+  const close = () => { stop(); o.remove(); };
+  const open = async () => {
+    stop();
+    try { st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 } }, audio: true }); pv.srcObject = st; }
+    catch (e) { toast('تعذّر فتح الكاميرا'); }
+  };
+  x.onclick = () => { if (mr && mr.state === 'recording') { mr.onstop = null; mr.stop(); } close(); };
+  fl.onclick = () => { if (mr && mr.state === 'recording') return; facing = facing === 'user' ? 'environment' : 'user'; open(); };
+  const review = blob => {
+    if (blob.size > RBYTES) { toast('الفيديو كبير (الحد 15MB)'); return open(); }
+    const url = URL.createObjectURL(blob), rv = el('video'), cap = el('input'), pub = el('button', 'btn', 'نشر'), re = el('button', 'btn ghost', 'إعادة'), row = el('div', 'rcc');
+    rv.src = url; rv.controls = true; rv.loop = true; rv.autoplay = true; rv.setAttribute('playsinline', ''); rv.style.cssText = 'flex:1;min-height:0;width:100%;object-fit:contain';
+    cap.placeholder = 'تعليق (اختياري)'; cap.maxLength = 150; row.append(re, pub); o.replaceChildren(rv, cap, row);
+    re.onclick = () => { URL.revokeObjectURL(url); o.replaceChildren(pv, tm, cc, fi); tm.textContent = '0:00'; open(); };
+    pub.onclick = async () => {
+      pub.disabled = true; toast('جارٍ النشر…');
+      try {
+        const base = (blob.type || 'video/mp4').split(';')[0], ext = base.includes('webm') ? 'webm' : 'mp4', path = ME.id + '/' + crypto.randomUUID() + '.' + ext;
+        const r = await raw('/storage/v1/object/reels/' + path, { method: 'POST', headers: { 'Content-Type': base }, body: blob });
+        if (!r.ok) throw new Error('تعذّر رفع الفيديو');
+        await api('/rest/v1/reels', { method: 'POST', body: JSON.stringify({ media_path: path, caption: cap.value.trim() || null }) });
+        URL.revokeObjectURL(url); close(); toast('تم نشر الريل ✓'); done();
+      } catch (e) { pub.disabled = false; toast(e.message || 'تعذّر النشر'); }
+    };
+  };
+  rec.onclick = () => {
+    if (mr && mr.state === 'recording') return mr.stop();
+    if (!st) return open();
+    const mime = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+    if (!mime) return toast('المتصفح ما بيدعم التسجيل');
+    chunks = []; mr = new MediaRecorder(st, { mimeType: mime, videoBitsPerSecond: 1500000, audioBitsPerSecond: 64000 });
+    mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    mr.onstop = () => { clearInterval(tick); rec.classList.remove('on'); const b = new Blob(chunks, { type: mime.split(';')[0] }); stop(); review(b); };
+    mr.start(1000); t0 = Date.now(); rec.classList.add('on');
+    tick = setInterval(() => { const sec = Math.floor((Date.now() - t0) / 1000); tm.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); if (sec >= RMAXS) mr.stop(); }, 250);
+  };
+  gal.onclick = () => fi.click();
+  fi.onchange = () => {
+    const f = fi.files[0]; fi.value = ''; if (!f) return;
+    if (f.size > RBYTES) return toast('الفيديو كبير، الحد 15MB. سجّل من هون أو قصّه');
+    const u = URL.createObjectURL(f), t = document.createElement('video'); t.preload = 'metadata';
+    t.onloadedmetadata = () => { URL.revokeObjectURL(u); if (t.duration > RMAXS + 2) return toast('الحد الأقصى 30 ثانية'); stop(); review(f); };
+    t.onerror = () => { URL.revokeObjectURL(u); toast('ما قدرت أقرأ الفيديو'); };
+    t.src = u;
+  };
+  open();
 }
 
 /* ---------- Status ---------- */
