@@ -669,7 +669,7 @@ async function viewReels() {
   const v = $('#view'); v.style.cssText = 'padding:0;gap:0;overflow:hidden';
   v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
-    const rows = await api('/rest/v1/reels?select=id,user_id,media_path,caption,created_at,expires_at,profiles(name,phone,avatar_path),reel_likes(user_id)&order=created_at.desc&limit=30');
+    const rows = await api('/rest/v1/reels?select=id,user_id,media_path,caption,created_at,expires_at,profiles!reels_user_id_fkey(name,phone,avatar_path),reel_likes(user_id)&order=created_at.desc&limit=30');
     const now = Date.now(), live = [];
     rows.forEach(x => { if (new Date(x.expires_at) > now) live.push(x); else if (x.user_id === ME.id) reelDel(x).catch(() => {}); });
     const wrap = el('div', 'rwrap'), add = el('button', 'radd', '➕'); add.onclick = () => reelRecorder(viewReels);
