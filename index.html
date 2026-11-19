@@ -69,6 +69,7 @@ header b{font-size:1.1rem}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .msg{cursor:pointer}.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.chip{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 8px;font-size:.85rem}.chip.me{outline:1.5px solid var(--acc)}.rxpick{display:flex;gap:2px;margin-top:6px;background:var(--card);border-radius:16px;padding:4px;width:max-content;max-width:100%}.rxpick button{border:0;background:0;font-size:1.4rem;cursor:pointer;padding:2px 5px}
 .quote{background:rgba(127,127,127,.2);border-inline-start:3px solid var(--acc);border-radius:8px;padding:3px 8px;margin-bottom:5px;font-size:.85rem;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.rbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--field);border-inline-start:3px solid var(--acc);border-radius:10px;font-size:.88rem}.rbar[hidden]{display:none}.rbar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rbar button{border:0;background:0;cursor:pointer;color:var(--mut)}#callbtn{margin-inline-start:auto;border:0;background:0;font-size:1.4rem;cursor:pointer}.callbox{position:fixed;inset:0;z-index:60;background:#0B1220;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}.callbox h2{margin:0}.cl{display:flex;flex-direction:column;gap:8px;min-width:220px}.cl div{background:rgba(255,255,255,.08);border-radius:12px;padding:8px 14px}.cl .sp{outline:2px solid var(--acc)}.cb{display:flex;gap:14px}.cb button{border:0;border-radius:50%;width:64px;height:64px;font-size:1.6rem;cursor:pointer;background:#2A3548;color:#fff}.cb .end{background:#D6334B}.cb .ok{background:#1FA45B}
+.ed{font-size:.7rem;opacity:.6;margin-inline-start:6px}.rxpick button.ed2{font-size:.9rem;font-weight:700}
 .sname{font-size:.75rem;font-weight:700;color:var(--acc);margin-bottom:2px}.rxpick button.del{font-size:.9rem;font-weight:700;color:#D6334B}.rxpick button.rp{font-size:.9rem;font-weight:700;color:var(--pri)}
 @keyframes sp{to{width:100%}}.sv{position:fixed;inset:0;background:#000;z-index:50;display:flex;flex-direction:column;color:#fff}.sv .bars{display:flex;gap:4px;padding:10px 10px 4px}.sv .bars i{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden}.sv .bars b{display:block;height:100%;width:0;background:#fff}.sv .top{display:flex;align-items:center;gap:10px;padding:6px 12px}.sv .grow{flex:1}.sv .body{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;font-size:1.6rem;font-weight:700;overflow:hidden;position:relative;cursor:pointer}.sv .body img{max-width:100%;max-height:100%;object-fit:contain}.sv .cap{position:absolute;bottom:0;left:0;right:0;padding:12px 16px;background:rgba(0,0,0,.55);font-size:1rem;font-weight:400}.sv>.top button{border:0;background:0;color:#fff;font-size:1.3rem;cursor:pointer}
 .msg img{max-width:100%;max-height:320px;border-radius:12px;display:block;min-width:80px;min-height:60px;background:rgba(127,127,127,.15)}
@@ -249,6 +250,7 @@ function rtStart(chatId, onChange, onTyping) {
     send(topic, 'phx_join', {
       config: { broadcast: { ack: false, self: false }, presence: { key: '' },
         postgres_changes: [{ event: 'INSERT', schema: 'public', table: 'messages', filter: 'chat_id=eq.' + chatId },
+          { event: 'UPDATE', schema: 'public', table: 'messages', filter: 'chat_id=eq.' + chatId },
           { event: 'UPDATE', schema: 'public', table: 'chat_members', filter: 'chat_id=eq.' + chatId },
           { event: '*', schema: 'public', table: 'message_reactions', filter: 'chat_id=eq.' + chatId }] },
       access_token: S.access_token
@@ -321,7 +323,7 @@ function msgEl(x, readAt) {
     const a = el('audio'); a.controls = true; a.preload = 'metadata'; a.style.cssText = 'width:230px;max-width:100%';
     imgUrl(x.body).then(u => { a.src = u; }).catch(() => {});
     d.append(a);
-  } else d.append(document.createTextNode(x.body || ''));
+  } else { d.append(el('span', 'mt', x.body || '')); if (x.edited_at) d.append(el('span', 'ed', '✎ معدّلة')); }
   if (mine) d.append(el('span', 'tick', readAt && readAt >= x.created_at ? '✔✔' : '✔'));
   return d;
 }
@@ -335,7 +337,7 @@ function drawRx(e, list) {
   const g = {}; list.forEach(r => { const o = g[r.emoji] = g[r.emoji] || { n: 0, me: false }; o.n++; if (r.user_id === ME.id) o.me = true; });
   b.replaceChildren(...Object.keys(g).map(k => el('span', 'chip' + (g[k].me ? ' me' : ''), k + (g[k].n > 1 ? ' ' + g[k].n : ''))));
 }
-function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete) {
+function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete, onEdit) {
   document.querySelectorAll('.rxpick').forEach(x => x.remove());
   const p = el('div', 'rxpick');
   RXS.forEach(k => {
@@ -351,6 +353,7 @@ function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete) {
     p.append(b);
   });
   if (onReply) { const rb = el('button', 'rp', 'رد'); rb.onclick = ev => { ev.stopPropagation(); p.remove(); onReply(); }; p.append(rb); }
+  if (onEdit) { const eb = el('button', 'rp', 'تعديل'); eb.onclick = ev => { ev.stopPropagation(); p.remove(); onEdit(); }; p.append(eb); }
   if (onDelete) { const db = el('button', 'del', 'حذف'); db.onclick = ev => { ev.stopPropagation(); p.remove(); onDelete(); }; p.append(db); }
   anchor.append(p);
 }
@@ -400,9 +403,11 @@ function openChat(id, name, otherId, grp) {
   inp.placeholder = 'اكتب رسالة…'; bar.append(att, mic, inp, send, cancel, file); cancel.hidden = true;
   const typ = el('div', 'mut'); typ.style.cssText = 'min-height:18px;font-size:.82rem'; let reply = null; const rbar = el('div', 'rbar'), rtx = el('span'), rcl = el('button', '', '✖'); rbar.append(rtx, rcl); rbar.hidden = true;
   const rp = () => (reply ? { reply_to: reply } : {});
-  const clearReply = () => { reply = null; rbar.hidden = true; };
+  let editing = null;
+  const clearReply = () => { reply = null; editing = null; rbar.hidden = true; send.textContent = 'إرسال'; };
+  const setEdit = x => { clearReply(); editing = x.id; rtx.textContent = '✏️ تعديل الرسالة'; rbar.hidden = false; inp.value = x.body || ''; send.textContent = 'حفظ'; inp.focus(); };
   const setReply = x => { reply = x.id; rtx.textContent = '↩️ ' + prevTxt(x); rbar.hidden = false; inp.focus(); };
-  rcl.onclick = clearReply;
+  rcl.onclick = () => { if (editing) inp.value = ''; clearReply(); };
   const delMsg = async x => {
     if (!confirm('تحذف هالرسالة للجميع؟')) return;
     try {
@@ -421,7 +426,7 @@ function openChat(id, name, otherId, grp) {
     if (CHAT !== id) return;
     try {
       const [m, mem, rx] = await Promise.all([
-        api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at,reply_to`),
+        api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at,reply_to,edited_at`),
         api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`),
         api(`/rest/v1/message_reactions?chat_id=eq.${id}&select=message_id,user_id,emoji`).catch(() => [])
       ]);
@@ -435,10 +440,12 @@ function openChat(id, name, otherId, grp) {
         let e = els[x.id];
         if (!e) {
           e = els[x.id] = msgEl(x, readAt); box.append(e);
-          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x), x.sender_id === ME.id ? () => delMsg(x) : null); };
+          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x), x.sender_id === ME.id ? () => delMsg(x) : null, x.sender_id === ME.id && (!x.kind || x.kind === 'text') ? () => setEdit(x) : null); };
           if (x.reply_to) { const o = byId[x.reply_to], q = el('div', 'quote', o ? prevTxt(o) : 'رسالة محذوفة'); q.onclick = ev => { ev.stopPropagation(); const t = els[x.reply_to]; if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }; e.prepend(q); }
           if (grp && x.sender_id !== ME.id) e.prepend(el('div', 'sname', grp.members[x.sender_id] || 'مستخدم'));
         }
+        const mt = e.querySelector('.mt');
+        if (mt) { if (mt.textContent !== (x.body || '')) mt.textContent = x.body || ''; const ed = e.querySelector('.ed'); if (x.edited_at && !ed) mt.after(el('span', 'ed', '✎ معدّلة')); }
         drawRx(e, RX[x.id] || []);
         const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
       });
@@ -448,7 +455,16 @@ function openChat(id, name, otherId, grp) {
     } catch (e) {}
   };
   const go = async () => {
-    const t = inp.value.trim(); if (!t) return; inp.value = '';
+    const t = inp.value.trim(); if (!t) return;
+    if (editing) {
+      try {
+        const r = await api('/rest/v1/messages?id=eq.' + editing, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ body: t }) });
+        if (!r || !r.length) throw new Error('ما فيك تعدّل هالرسالة');
+        inp.value = ''; clearReply(); load();
+      } catch (e) { toast(e.message); }
+      return;
+    }
+    inp.value = '';
     try { await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: id, body: t, ...rp() }) }); clearReply(); load(); }
     catch (e) { toast(e.message); inp.value = t; }
   };
@@ -881,3 +897,4 @@ boot();
 </script>
 </body>
 </html>
+
