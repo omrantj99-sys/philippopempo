@@ -706,7 +706,7 @@ async function viewReels() {
       it.append(vd, ov, acts); feed.append(it); io.observe(it);
     });
     wrap.append(feed, mt, add);
-  } catch (e) { v.replaceChildren(el('p', 'empty', 'تعذّر تحميل الريلز')); }
+  } catch (e) { const m = el('p', 'empty', 'تعذّر تحميل الريلز'); const d = el('div', 'mut', String(e.message || e).slice(0, 200)); d.dir = 'ltr'; d.style.cssText = 'font-size:.8rem;padding:0 20px;color:#fff'; m.append(d); v.replaceChildren(m); }
 }
 function reelRecorder(done) {
   const o = el('div', 'sv'), pv = el('video'), cc = el('div', 'rcc'), rec = el('button', 'rbig'), gal = el('button', 'btn ghost', '📁'), fl = el('button', 'btn ghost', '🔄'), x = el('button', 'btn ghost', '✕'), tm = el('div', 'rtm', '0:00'), fi = el('input');
