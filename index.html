@@ -16,6 +16,8 @@
 :root[data-theme=dark]{--bg:#0A1226;--card:#121C38;--ink:#EAF0FF;--mut:#8EA0C8;--pri:#4D7BFF;--line:#22305A;--field:#0E1730}
 :root{--w1:linear-gradient(160deg,rgba(31,79,216,.16),rgba(25,195,177,.16));--w2:linear-gradient(180deg,#0b1020,#1b1f4a);--w3:linear-gradient(160deg,#fde8d4,#f8cfd8);--w4:radial-gradient(rgba(127,127,127,.22) 1.5px,transparent 1.6px) 0 0/18px 18px;--w5:linear-gradient(160deg,#d8f3e8,#c4e8f5)}
 [data-wall=w1] .msgs{background:var(--w1)}[data-wall=w2] .msgs{background:var(--w2)}[data-wall=w3] .msgs{background:var(--w3)}[data-wall=w4] .msgs{background:var(--w4)}[data-wall=w5] .msgs{background:var(--w5)}
+.sbar{flex:none;display:flex;align-items:center;gap:6px;padding:6px 8px}.sbar input{flex:1;padding:8px 12px}.msg.hit{outline:2px solid #F5B301}.msg.cur{outline:3px solid var(--pri)}
+.badge.m{background:var(--line);color:var(--mut)}.sbg{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}.sheet{width:100%;background:var(--card);border-radius:22px 22px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}.sheet b{text-align:center}.sheet .btn{background:var(--field);color:var(--ink);border:1.5px solid var(--line)}
 .seg{display:flex;gap:6px}.seg button{flex:1;padding:10px;border:1.5px solid var(--line);border-radius:12px;background:var(--field);cursor:pointer;font-weight:700}.seg button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
 .swr{display:flex;gap:8px;flex-wrap:wrap}.sw{width:46px;height:46px;border-radius:12px;border:2px solid var(--line);background:var(--field);cursor:pointer;padding:0}.sw.on{border-color:var(--pri);box-shadow:0 0 0 2px var(--pri)}.sw[data-k=w1]{background:var(--w1)}.sw[data-k=w2]{background:var(--w2)}.sw[data-k=w3]{background:var(--w3)}.sw[data-k=w4]{background:var(--w4)}.sw[data-k=w5]{background:var(--w5)}
 *{box-sizing:border-box;margin:0}
@@ -84,8 +86,8 @@ header b{font-size:1.1rem}
 .tick{font-size:.72rem;opacity:.85;margin-inline-start:6px}
 .badge{background:var(--acc);color:#04342e;border-radius:999px;min-width:22px;padding:2px 8px;font-size:.78rem;font-weight:800;text-align:center}
 .bar .att{padding:0 12px;font-size:1.1rem}
-#infobtn{border:0;background:0;font-size:1.3rem;cursor:pointer}.ginfo{position:fixed;inset:0;z-index:55;background:var(--bg);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 16px calc(14px + env(safe-area-inset-bottom));gap:10px;overflow:auto}.ginfo .gtop{display:flex;align-items:center;justify-content:space-between;gap:10px}.ginfo .gmem{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:10px 12px}.ginfo .gmem .grow{flex:1;font-weight:600}.ginfo .gmem .rm{border:0;background:0;color:#D6334B;font-size:1.1rem;cursor:pointer}.ginfo .gadd{display:flex;gap:8px}.ginfo .gadd .btn{width:auto;padding:0 16px;white-space:nowrap}
-#vcallbtn{border:0;background:0;font-size:1.4rem;cursor:pointer}.vg{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%;max-width:680px}.vg:empty{display:none}.vt{position:relative;flex:1 1 44%;min-width:140px;background:#000;border-radius:14px;overflow:hidden}.vt video{width:100%;display:block;max-height:46vh;object-fit:cover}.vt span{position:absolute;bottom:6px;inset-inline-start:8px;color:#fff;font-size:.8rem;text-shadow:0 0 4px #000}.vt.mine video{transform:scaleX(-1)}
+#infobtn,#vcallbtn,#sbtn{border:0;background:0;font-size:1.3rem;cursor:pointer}.ginfo{position:fixed;inset:0;z-index:55;background:var(--bg);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 16px calc(14px + env(safe-area-inset-bottom));gap:10px;overflow:auto}.ginfo .gtop{display:flex;align-items:center;justify-content:space-between;gap:10px}.ginfo .gmem{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:10px 12px}.ginfo .gmem .grow{flex:1;font-weight:600}.ginfo .gmem .rm{border:0;background:0;color:#D6334B;font-size:1.1rem;cursor:pointer}.ginfo .gadd{display:flex;gap:8px}.ginfo .gadd .btn{width:auto;padding:0 16px;white-space:nowrap}
+.vg{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%;max-width:680px}.vg:empty{display:none}.vt{position:relative;flex:1 1 44%;min-width:140px;background:#000;border-radius:14px;overflow:hidden}.vt video{width:100%;display:block;max-height:46vh;object-fit:cover}.vt span{position:absolute;bottom:6px;inset-inline-start:8px;color:#fff;font-size:.8rem;text-shadow:0 0 4px #000}.vt.mine video{transform:scaleX(-1)}
 .rwrap{flex:1;min-height:0;background:#000;display:flex;flex-direction:column;position:relative}.rf{flex:1;min-height:0;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none}.rf::-webkit-scrollbar{display:none}.rl{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;background:#000}.rl video{width:100%;height:100%;object-fit:contain;display:block}.rl .ov{position:absolute;inset-inline:0;bottom:0;padding:48px 70px 16px 14px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;pointer-events:none}.rl .who{display:flex;align-items:center;gap:8px;font-weight:700}.rl .cap{margin-top:6px;font-size:.92rem}.rl .acts{position:absolute;inset-inline-end:10px;bottom:90px;display:flex;flex-direction:column;gap:12px;align-items:center}.rl .acts button{border:0;background:rgba(0,0,0,.5);color:#fff;border-radius:24px;padding:8px 12px;font-size:1.05rem;cursor:pointer}.radd{position:absolute;top:10px;inset-inline-start:10px;z-index:5;border:0;border-radius:50%;width:44px;height:44px;background:var(--pri);color:#fff;font-size:1.3rem;cursor:pointer}.rmute{position:absolute;top:16px;inset-inline-end:14px;z-index:5;color:#fff;font-size:1.3rem;pointer-events:none;text-shadow:0 0 4px #000}.rcc{display:flex;gap:16px;justify-content:center;align-items:center;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}.rbig{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:#D6334B;cursor:pointer;padding:0}.rbig.on{border-radius:18px}.rtm{position:absolute;top:calc(12px + env(safe-area-inset-top));inset-inline:0;text-align:center;font-weight:700;color:#fff;text-shadow:0 0 4px #000;pointer-events:none}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -113,7 +115,7 @@ header b{font-size:1.1rem}
 </div>
 
 <div id="app" hidden>
-  <header><svg class="logo sm"><use href="#logo"/></svg><div><b id="title"></b><div id="sub" class="mut" style="font-size:.78rem;min-height:1em"></div></div><button id="callbtn" hidden title="مكالمة صوتية">📞</button><button id="vcallbtn" hidden title="مكالمة فيديو">🎥</button><button id="infobtn" hidden title="معلومات المجموعة">ℹ️</button></header>
+  <header><svg class="logo sm"><use href="#logo"/></svg><div><b id="title"></b><div id="sub" class="mut" style="font-size:.78rem;min-height:1em"></div></div><button id="callbtn" hidden title="مكالمة صوتية">📞</button><button id="vcallbtn" hidden title="مكالمة فيديو">🎥</button><button id="sbtn" hidden title="بحث">🔍</button><button id="infobtn" hidden title="معلومات المحادثة">ℹ️</button></header>
   <section id="view"></section>
   <nav class="nav">
     <button data-t="chats"><span>💬</span>المحادثات</button>
@@ -297,7 +299,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { pi
 /* ---------- App views ---------- */
 function tab(n) {
   $('#view').style.cssText = '';
-  if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = ''; $('#callbtn').hidden = true; $('#vcallbtn').hidden = true; $('#infobtn').hidden = true;
+  if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = ''; $('#callbtn').hidden = true; $('#vcallbtn').hidden = true; $('#infobtn').hidden = true; $('#sbtn').hidden = true;
   document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
   $('#title').textContent = { chats: 'المحادثات', status: 'الحالة', reels: 'ريلز', new: 'محادثة جديدة', me: 'حسابي' }[n];
   ({ chats: viewChats, status: viewStatus, reels: viewReels, new: viewNew, me: viewMe })[n]();
@@ -437,6 +439,12 @@ async function deleteAccount() {
   } catch (e) { toast(e.message); }
 }
 
+let SHOWARCH = false;
+function chatMenu(title, pf, set) {
+  const bg = el('div', 'sbg'), sh = el('div', 'sheet'), add = (t, k) => { const b = el('button', 'btn', t); b.onclick = () => { bg.remove(); set(k, !pf[k]); }; sh.append(b); };
+  sh.append(el('b', '', title)); add(pf.pinned ? '📌 إلغاء التثبيت' : '📌 تثبيت', 'pinned'); add(pf.muted ? '🔔 إلغاء الكتم' : '🔕 كتم', 'muted'); add(pf.archived ? '📦 إلغاء الأرشفة' : '📦 أرشفة', 'archived');
+  const c = el('button', 'btn ghost', 'إلغاء'); c.onclick = () => bg.remove(); sh.append(c); bg.onclick = e => { if (e.target === bg) bg.remove(); }; bg.append(sh); document.body.append(bg);
+}
 async function viewChats() {
   const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
@@ -452,6 +460,8 @@ async function viewChats() {
       const ms = await api('/rest/v1/messages?select=chat_id,created_at&sender_id=neq.' + ME.id + '&order=created_at.desc&limit=500');
       ms.forEach(m => { if (mine[m.chat_id] && m.created_at > mine[m.chat_id]) unread[m.chat_id] = (unread[m.chat_id] || 0) + 1; });
     } catch (e) {}
+    let P = {};
+    try { (await api('/rest/v1/chat_prefs?select=chat_id,pinned,muted,archived')).forEach(r => { P[r.chat_id] = r; }); } catch (e) {}
     const q = el('input'), list = el('div');
     q.placeholder = 'ابحث في المحادثات…'; list.style.cssText = 'display:flex;flex-direction:column;gap:10px';
     const items = ids.map(id => {
@@ -462,13 +472,23 @@ async function viewChats() {
       const b = el('button', 'row'); b.dataset.n = names.toLowerCase();
       const dm = !g && oth.length === 1;
       b.append(avatar(names, g ? g.avatar_path : (dm && oth[0].profiles ? oth[0].profiles.avatar_path : null)), el('div', 'grow', names));
-      if (unread[id]) b.append(el('span', 'badge', unread[id]));
+      const pf = P[id] || {};
+      if (pf.pinned) b.append(el('span', '', '📌')); if (pf.muted) b.append(el('span', '', '🔕'));
+      if (unread[id]) b.append(el('span', 'badge' + (pf.muted ? ' m' : ''), unread[id]));
+      b.dataset.p = pf.pinned ? '1' : ''; b.dataset.a = pf.archived ? '1' : '';
+      let lp = null, fired = false;
+      const menu = () => { fired = true; chatMenu(names, pf, async (k, val) => { try { await api('/rest/v1/chat_prefs?on_conflict=user_id,chat_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ chat_id: id, [k]: val }) }); viewChats(); } catch (e) { toast(e.message); } }); };
+      b.addEventListener('touchstart', () => { lp = setTimeout(menu, 500); }, { passive: true });
+      ['touchend', 'touchmove', 'touchcancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(lp), { passive: true }));
+      b.oncontextmenu = e => { e.preventDefault(); menu(); };
       const mem = {}; by[id].forEach(r => { mem[r.user_id] = pn(r); });
-      b.onclick = () => openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem, avatar: g.avatar_path } : null); return b;
+      b.onclick = () => { if (fired) { fired = false; return; } openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem, avatar: g.avatar_path } : null); }; return b;
     });
-    list.append(...items);
-    q.oninput = () => { const t = q.value.trim().toLowerCase(); items.forEach(b => { b.hidden = !b.dataset.n.includes(t); }); };
-    v.replaceChildren(q, list);
+    const arch = items.filter(b => b.dataset.a), shown = items.filter(b => (!b.dataset.a) !== SHOWARCH).sort((a, b) => (b.dataset.p ? 1 : 0) - (a.dataset.p ? 1 : 0));
+    const top = el('button', 'row'); top.hidden = !SHOWARCH && !arch.length; top.append(el('div', 'grow', SHOWARCH ? '⬅️ كل المحادثات' : '📦 المؤرشفة (' + arch.length + ')')); top.onclick = () => { SHOWARCH = !SHOWARCH; viewChats(); };
+    list.append(top, ...shown);
+    q.oninput = () => { const t = q.value.trim().toLowerCase(); shown.forEach(b => { b.hidden = !b.dataset.n.includes(t); }); };
+    v.replaceChildren(q, el('div', 'mut', 'اضغط مطوّلاً على محادثة للتثبيت أو الكتم أو الأرشفة'), list);
   } catch (e) { v.replaceChildren(empty('تعذّر تحميل المحادثات', e.message)); }
 }
 
@@ -497,7 +517,20 @@ function openChat(id, name, otherId, grp) {
       load();
     } catch (e) { toast(e.message); }
   };
-  v.replaceChildren(box, typ, rbar, bar);
+  const sbtn = $('#sbtn'), sb = el('div', 'sbar'), si = el('input'), sc = el('span', 'mut'), su = el('button', 'lnk', '▲'), sd = el('button', 'lnk', '▼'), sx = el('button', 'lnk', '✕');
+  si.placeholder = 'ابحث بالمحادثة'; sb.append(si, sc, su, sd, sx); sb.hidden = true; sbtn.hidden = false;
+  let hits = [], hi = 0;
+  const clearHits = () => { box.querySelectorAll('.hit').forEach(e => e.classList.remove('hit', 'cur')); hits = []; sc.textContent = ''; };
+  const goHit = d => { if (!hits.length) return; hits[hi].classList.remove('cur'); hi = (hi + d + hits.length) % hits.length; hits[hi].classList.add('cur'); hits[hi].scrollIntoView({ block: 'center' }); sc.textContent = (hi + 1) + '/' + hits.length; };
+  si.oninput = () => {
+    clearHits(); const t = si.value.trim().toLowerCase(); if (!t) return;
+    box.querySelectorAll('.msg').forEach(m => { const mt = m.querySelector('.mt'); if (mt && mt.textContent.toLowerCase().includes(t)) { m.classList.add('hit'); hits.push(m); } });
+    if (!hits.length) sc.textContent = '0'; else { hi = hits.length - 1; goHit(0); }
+  };
+  si.onkeydown = e => { if (e.key === 'Enter') goHit(e.shiftKey ? 1 : -1); };
+  su.onclick = () => goHit(-1); sd.onclick = () => goHit(1);
+  sbtn.onclick = () => { sb.hidden = !sb.hidden; if (sb.hidden) { clearHits(); si.value = ''; } else si.focus(); }; sx.onclick = sbtn.onclick;
+  v.replaceChildren(sb, box, typ, rbar, bar);
   let tt, lastT = 0;
   const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
   inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
