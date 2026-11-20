@@ -18,6 +18,8 @@
 [data-wall=w1] .msgs{background:var(--w1)}[data-wall=w2] .msgs{background:var(--w2)}[data-wall=w3] .msgs{background:var(--w3)}[data-wall=w4] .msgs{background:var(--w4)}[data-wall=w5] .msgs{background:var(--w5)}
 .sbar{flex:none;display:flex;align-items:center;gap:6px;padding:6px 8px}.sbar input{flex:1;padding:8px 12px}.msg.hit{outline:2px solid #F5B301}.msg.cur{outline:3px solid var(--pri)}
 .badge.m{background:var(--line);color:var(--mut)}.sbg{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}.sheet{width:100%;background:var(--card);border-radius:22px 22px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}.sheet b{text-align:center}.sheet .btn{background:var(--field);color:var(--ink);border:1.5px solid var(--line)}
+.pop{position:absolute;inset:0;display:grid;place-items:center;font-size:5rem;pointer-events:none;animation:pop .7s ease-out forwards}@keyframes pop{0%{transform:scale(.3);opacity:0}30%{opacity:1;transform:scale(1.2)}100%{transform:scale(1);opacity:0}}
+.sheet.tall{max-height:80vh}.cmts{display:flex;flex-direction:column;gap:12px;overflow:auto;max-height:50vh;min-height:80px}.cm{display:flex;gap:10px;align-items:flex-start}.cm .av{width:34px;height:34px;font-size:.9rem}.cm .grow{flex:1;word-break:break-word}
 .seg{display:flex;gap:6px}.seg button{flex:1;padding:10px;border:1.5px solid var(--line);border-radius:12px;background:var(--field);cursor:pointer;font-weight:700}.seg button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
 .swr{display:flex;gap:8px;flex-wrap:wrap}.sw{width:46px;height:46px;border-radius:12px;border:2px solid var(--line);background:var(--field);cursor:pointer;padding:0}.sw.on{border-color:var(--pri);box-shadow:0 0 0 2px var(--pri)}.sw[data-k=w1]{background:var(--w1)}.sw[data-k=w2]{background:var(--w2)}.sw[data-k=w3]{background:var(--w3)}.sw[data-k=w4]{background:var(--w4)}.sw[data-k=w5]{background:var(--w5)}
 *{box-sizing:border-box;margin:0}
@@ -806,18 +808,23 @@ async function viewReels() {
   const v = $('#view'); v.style.cssText = 'padding:0;gap:0;overflow:hidden';
   v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
-    const rows = await api('/rest/v1/reels?select=id,user_id,media_path,caption,created_at,expires_at,profiles!reels_user_id_fkey(name,phone,avatar_path),reel_likes(user_id)&order=created_at.desc&limit=30');
+    const rows = await api('/rest/v1/reels?select=id,user_id,media_path,caption,created_at,expires_at,profiles!reels_user_id_fkey(name,phone,avatar_path),reel_likes(user_id),reel_comments(count)&order=created_at.desc&limit=30');
     const now = Date.now(), live = [];
     rows.forEach(x => { if (new Date(x.expires_at) > now) live.push(x); else if (x.user_id === ME.id) reelDel(x).catch(() => {}); });
     const wrap = el('div', 'rwrap'), add = el('button', 'radd', '➕'); add.onclick = () => reelRecorder(viewReels);
     v.replaceChildren(wrap);
     if (!live.length) { wrap.append(empty('ما في ريلز بعد', 'كن أول من ينشر ريل 🎬'), add); return; }
-    const feed = el('div', 'rf'), vids = [], mt = el('div', 'rmute', '🔇');
+    const feed = el('div', 'rf'), vids = [], mt = el('div', 'rmute', '🔇'), toggleMute = () => { RMUTE = !RMUTE; vids.forEach(q => { q.muted = RMUTE; }); mt.textContent = RMUTE ? '🔇' : '🔊'; };
     const io = new IntersectionObserver(es => es.forEach(e => { const vd = e.target.querySelector('video'); if (e.isIntersecting) vd.play().catch(() => {}); else vd.pause(); }), { root: feed, threshold: 0.7 });
     live.forEach(x => {
       const it = el('div', 'rl'), vd = el('video'), ov = el('div', 'ov'), who = el('div', 'who'), acts = el('div', 'acts');
       vd.src = RL(x.media_path); vd.loop = true; vd.muted = RMUTE; vd.setAttribute('playsinline', ''); vd.preload = 'metadata'; vids.push(vd);
-      vd.onclick = () => { RMUTE = !RMUTE; vids.forEach(q => { q.muted = RMUTE; }); mt.textContent = RMUTE ? '🔇' : '🔊'; };
+      let tapT = 0, tapTm = null;
+      vd.onclick = () => {
+        const n = Date.now();
+        if (n - tapT < 300) { clearTimeout(tapTm); tapT = 0; if (!ls.has(ME.id)) lk.click(); const h = el('div', 'pop', '❤️'); it.append(h); setTimeout(() => h.remove(), 700); }
+        else { tapT = n; tapTm = setTimeout(() => { tapT = 0; toggleMute(); }, 300); }
+      };
       const nm = (x.profiles && (x.profiles.name || x.profiles.phone)) || 'مستخدم';
       who.append(avatar(nm, x.profiles && x.profiles.avatar_path), el('span', '', nm)); ov.append(who); if (x.caption) ov.append(el('div', 'cap', x.caption));
       const ls = new Set(x.reel_likes.map(l => l.user_id)), lk = el('button'), drawL = () => { lk.textContent = (ls.has(ME.id) ? '❤️ ' : '🤍 ') + ls.size; };
@@ -830,6 +837,9 @@ async function viewReels() {
         } catch (e) { if (had) ls.add(ME.id); else ls.delete(ME.id); drawL(); toast(e.message); }
       };
       acts.append(lk);
+      const cm = el('button', '', '💬 ' + ((x.reel_comments && x.reel_comments[0] && x.reel_comments[0].count) || 0));
+      cm.onclick = () => reelComments(x, n => { cm.textContent = '💬 ' + n; });
+      acts.append(cm);
       if (x.user_id === ME.id) {
         const d = el('button', '', '🗑'); d.onclick = async () => { if (!confirm('تحذف هالريل؟')) return; try { await reelDel(x); viewReels(); } catch (e) { toast(e.message); } }; acts.append(d);
       } else {
@@ -844,6 +854,36 @@ async function viewReels() {
     });
     wrap.append(feed, mt, add);
   } catch (e) { const m = el('p', 'empty', 'تعذّر تحميل الريلز'); const d = el('div', 'mut', String(e.message || e).slice(0, 200)); d.dir = 'ltr'; d.style.cssText = 'font-size:.8rem;padding:0 20px;color:#fff'; m.append(d); v.replaceChildren(m); }
+}
+async function reelComments(x, onCount) {
+  const bg = el('div', 'sbg'), sh = el('div', 'sheet tall'), list = el('div', 'cmts'), row = el('div', 'sbar'), inp = el('input'), snd = el('button', 'btn', 'إرسال');
+  inp.placeholder = 'اكتب تعليق…'; inp.maxLength = 300; snd.style.width = 'auto'; row.append(inp, snd);
+  sh.append(el('b', '', 'التعليقات'), list, row); bg.append(sh); document.body.append(bg);
+  bg.onclick = e => { if (e.target === bg) bg.remove(); };
+  let rows = [];
+  const draw = () => {
+    list.replaceChildren(...(rows.length ? rows.map(c => {
+      const nm = (c.profiles && (c.profiles.name || c.profiles.phone)) || 'مستخدم', d = el('div', 'cm'), t = el('div', 'grow');
+      t.append(el('b', '', nm), el('div', '', c.body)); d.append(avatar(nm, c.profiles && c.profiles.avatar_path), t);
+      if (c.user_id === ME.id || x.user_id === ME.id) {
+        const del = el('button', 'lnk', '🗑');
+        del.onclick = async () => { try { await api('/rest/v1/reel_comments?id=eq.' + c.id, { method: 'DELETE' }); rows = rows.filter(r => r.id !== c.id); draw(); onCount(rows.length); } catch (e) { toast(e.message); } };
+        d.append(del);
+      }
+      return d;
+    }) : [el('p', 'empty', 'ما في تعليقات بعد')]));
+    list.scrollTop = list.scrollHeight;
+  };
+  try { rows = await api('/rest/v1/reel_comments?reel_id=eq.' + x.id + '&select=id,user_id,body,created_at,profiles!reel_comments_user_id_fkey(name,phone,avatar_path)&order=created_at.asc&limit=200'); draw(); } catch (e) { toast(e.message); }
+  const post = async () => {
+    const t = inp.value.trim(); if (!t) return; snd.disabled = true;
+    try {
+      const r = await api('/rest/v1/reel_comments', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ reel_id: x.id, body: t }) });
+      rows.push({ ...r[0], profiles: { name: PROF.name, phone: PROF.phone, avatar_path: PROF.avatar_path } }); inp.value = ''; draw(); onCount(rows.length);
+    } catch (e) { toast(e.message); }
+    snd.disabled = false;
+  };
+  snd.onclick = post; inp.onkeydown = e => { if (e.key === 'Enter') post(); };
 }
 function reelRecorder(done) {
   const o = el('div', 'sv'), pv = el('video'), cc = el('div', 'rcc'), rec = el('button', 'rbig'), gal = el('button', 'btn ghost', '📁'), fl = el('button', 'btn ghost', '🔄'), x = el('button', 'btn ghost', '✕'), tm = el('div', 'rtm', '0:00'), fi = el('input');
