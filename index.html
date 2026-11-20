@@ -342,7 +342,7 @@ function drawRx(e, list) {
   const g = {}; list.forEach(r => { const o = g[r.emoji] = g[r.emoji] || { n: 0, me: false }; o.n++; if (r.user_id === ME.id) o.me = true; });
   b.replaceChildren(...Object.keys(g).map(k => el('span', 'chip' + (g[k].me ? ' me' : ''), k + (g[k].n > 1 ? ' ' + g[k].n : ''))));
 }
-function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete, onEdit) {
+function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete, onEdit, onFwd) {
   document.querySelectorAll('.rxpick').forEach(x => x.remove());
   const p = el('div', 'rxpick');
   RXS.forEach(k => {
@@ -358,10 +358,76 @@ function pickRx(chatId, msgId, anchor, cur, done, onReply, onDelete, onEdit) {
     p.append(b);
   });
   if (onReply) { const rb = el('button', 'rp', 'رد'); rb.onclick = ev => { ev.stopPropagation(); p.remove(); onReply(); }; p.append(rb); }
+  if (onFwd) { const fb = el('button', 'rp', 'تحويل'); fb.onclick = ev => { ev.stopPropagation(); p.remove(); onFwd(); }; p.append(fb); }
   if (onEdit) { const eb = el('button', 'rp', 'تعديل'); eb.onclick = ev => { ev.stopPropagation(); p.remove(); onEdit(); }; p.append(eb); }
   if (onDelete) { const db = el('button', 'del', 'حذف'); db.onclick = ev => { ev.stopPropagation(); p.remove(); onDelete(); }; p.append(db); }
   anchor.append(p);
 }
+async function myChats() {
+  const rows = await api('/rest/v1/chat_members?select=chat_id,user_id,profiles(name,phone)');
+  const G = {}; try { (await api('/rest/v1/chats?select=id,is_group,title')).forEach(c => { G[c.id] = c; }); } catch (e) {}
+  const by = {}; rows.forEach(r => { (by[r.chat_id] = by[r.chat_id] || []).push(r); });
+  return Object.keys(by).map(id => {
+    const g = G[id] && G[id].is_group ? G[id] : null, oth = by[id].filter(r => r.user_id !== ME.id);
+    return { id, name: g ? (g.title || 'مجموعة') : (oth.map(r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم').join('، ') || 'ملاحظاتي') };
+  });
+}
+async function sendFwd(x, to) {
+  let body = x.body; const kind = x.kind || 'text';
+  if (kind === 'image' || kind === 'audio') {
+    const ext = (String(x.body).match(/\.[a-z0-9]+$/i) || ['.bin'])[0], dst = to + '/' + crypto.randomUUID() + ext;
+    const r = await raw('/storage/v1/object/copy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketId: 'chat-media', sourceKey: x.body, destinationKey: dst }) });
+    if (!r.ok) throw new Error('تعذّر تحويل الملف');
+    body = dst;
+  }
+  await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: to, kind, body }) });
+}
+async function forwardMsg(x) {
+  const o = el('div', 'ginfo'), top = el('div', 'gtop'), cl = el('button', 'lnk', '✖ إغلاق'), list = el('div');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:8px'; top.append(el('b', '', 'تحويل إلى…'), cl); o.append(top, list); document.body.append(o); cl.onclick = () => o.remove();
+  try {
+    (await myChats()).forEach(c => {
+      const b = el('button', 'row'); b.append(avatar(c.name, null), el('div', 'grow', c.name));
+      b.onclick = async () => { b.disabled = true; try { await sendFwd(x, c.id); o.remove(); toast('تم التحويل ✓'); } catch (e) { b.disabled = false; toast(e.message); } };
+      list.append(b);
+    });
+  } catch (e) { toast(e.message); }
+}
+async function dmInfo(otherId, name) {
+  const o = el('div', 'ginfo'), top = el('div', 'gtop'), x = el('button', 'lnk', '✖ إغلاق'), b = el('button', 'btn ghost');
+  top.append(el('b', '', name), x); o.append(top, avatar(name, null), b); document.body.append(o); x.onclick = () => o.remove();
+  let blocked = false; const draw = () => { b.textContent = blocked ? '✅ إلغاء الحظر' : '🚫 حظر المستخدم'; };
+  try { blocked = (await api('/rest/v1/blocks?blocker_id=eq.' + ME.id + '&blocked_id=eq.' + otherId + '&select=blocked_id')).length > 0; } catch (e) {}
+  draw();
+  b.onclick = async () => {
+    if (!blocked && !confirm('تحظر ' + name + '؟ ما رح تقدروا تتراسلوا أو تتصلوا ببعض.')) return;
+    try {
+      if (blocked) await api('/rest/v1/blocks?blocker_id=eq.' + ME.id + '&blocked_id=eq.' + otherId, { method: 'DELETE' });
+      else await api('/rest/v1/blocks', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ blocked_id: otherId }) });
+      blocked = !blocked; draw(); toast(blocked ? 'تم الحظر' : 'تم إلغاء الحظر');
+    } catch (e) { toast(e.message); }
+  };
+}
+async function deleteAccount() {
+  toast('جارٍ الحذف…');
+  const del = {}, add = (bk, p) => { if (p) (del[bk] = del[bk] || []).push(String(p).split('?')[0]); };
+  try {
+    const [ms, st, rl] = await Promise.all([
+      api('/rest/v1/messages?sender_id=eq.' + ME.id + '&kind=in.(image,audio)&select=body').catch(() => []),
+      api('/rest/v1/statuses?user_id=eq.' + ME.id + '&select=media_path').catch(() => []),
+      api('/rest/v1/reels?user_id=eq.' + ME.id + '&select=media_path').catch(() => [])
+    ]);
+    ms.forEach(m => add('chat-media', m.body)); st.forEach(m => add('statuses', m.media_path)); rl.forEach(m => add('reels', m.media_path));
+    try {
+      const r = await raw('/storage/v1/object/list/avatars', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefix: ME.id, limit: 100 }) });
+      (await r.json()).forEach(f => add('avatars', ME.id + '/' + f.name));
+    } catch (e) {}
+    for (const bk of Object.keys(del)) await raw('/storage/v1/object/' + bk, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: del[bk] }) }).catch(() => {});
+    await api('/rest/v1/rpc/delete_my_account', { method: 'POST', body: '{}' });
+    save(null); ME = null; show('auth'); toast('تم حذف حسابك');
+  } catch (e) { toast(e.message); }
+}
+
 async function viewChats() {
   const v = $('#view'); v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
@@ -371,7 +437,7 @@ async function viewChats() {
     const ids = Object.keys(by);
     if (!ids.length) return v.replaceChildren(empty('لا توجد محادثات بعد', 'ابدأ أول محادثة من تبويب «جديد».'));
     const G = {};
-    try { (await api('/rest/v1/chats?select=id,is_group,title')).forEach(c => { G[c.id] = c; }); } catch (e) {}
+    try { (await api('/rest/v1/chats?select=id,is_group,title,avatar_path')).forEach(c => { G[c.id] = c; }); } catch (e) {}
     const unread = {};
     try {
       const ms = await api('/rest/v1/messages?select=chat_id,created_at&sender_id=neq.' + ME.id + '&order=created_at.desc&limit=500');
@@ -386,10 +452,10 @@ async function viewChats() {
       const names = g ? (g.title || 'مجموعة') : (oth.map(pn).join('، ') || 'ملاحظاتي');
       const b = el('button', 'row'); b.dataset.n = names.toLowerCase();
       const dm = !g && oth.length === 1;
-      b.append(avatar(names, dm && oth[0].profiles ? oth[0].profiles.avatar_path : null), el('div', 'grow', names));
+      b.append(avatar(names, g ? g.avatar_path : (dm && oth[0].profiles ? oth[0].profiles.avatar_path : null)), el('div', 'grow', names));
       if (unread[id]) b.append(el('span', 'badge', unread[id]));
       const mem = {}; by[id].forEach(r => { mem[r.user_id] = pn(r); });
-      b.onclick = () => openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem } : null); return b;
+      b.onclick = () => openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem, avatar: g.avatar_path } : null); return b;
     });
     list.append(...items);
     q.oninput = () => { const t = q.value.trim().toLowerCase(); items.forEach(b => { b.hidden = !b.dataset.n.includes(t); }); };
@@ -401,7 +467,7 @@ function openChat(id, name, otherId, grp) {
   CHAT = id; $('#title').textContent = name;
   const cbtn = $('#callbtn'); cbtn.hidden = false; cbtn.onclick = () => startCall(id, name); const vbtn = $('#vcallbtn'); vbtn.hidden = false; vbtn.onclick = () => startCall(id, name, null, true);
   if (grp) $('#sub').textContent = 'مجموعة · ' + Object.keys(grp.members).length + ' أعضاء';
-  const ibtn = $('#infobtn'); ibtn.hidden = !grp; if (grp) ibtn.onclick = () => groupInfo(id, name, grp);
+  const ibtn = $('#infobtn'); ibtn.hidden = !grp && !otherId; ibtn.onclick = grp ? () => groupInfo(id, name, grp) : () => dmInfo(otherId, name);
   const v = $('#view'), box = el('div', 'msgs'), bar = el('div', 'bar'), inp = el('input'),
         send = el('button', 'btn', 'إرسال'), att = el('button', 'btn ghost att', '📷'), mic = el('button', 'btn ghost att', '🎤'), cancel = el('button', 'btn ghost att', '✖'), file = el('input');
   file.type = 'file'; file.accept = 'image/*'; file.hidden = true; att.onclick = () => file.click();
@@ -445,7 +511,7 @@ function openChat(id, name, otherId, grp) {
         let e = els[x.id];
         if (!e) {
           e = els[x.id] = msgEl(x, readAt); box.append(e);
-          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x), x.sender_id === ME.id ? () => delMsg(x) : null, x.sender_id === ME.id && (!x.kind || x.kind === 'text') ? () => setEdit(x) : null); };
+          e.onclick = ev => { if (ev.target.closest('audio,.rxpick,.quote')) return; const ex = e.querySelector('.rxpick'); if (ex) return ex.remove(); const mr = (RX[x.id] || []).find(r => r.user_id === ME.id); pickRx(id, x.id, e, mr && mr.emoji, load, () => setReply(x), x.sender_id === ME.id ? () => delMsg(x) : null, x.sender_id === ME.id && (!x.kind || x.kind === 'text') ? () => setEdit(x) : null, () => forwardMsg(x)); };
           if (x.reply_to) { const o = byId[x.reply_to], q = el('div', 'quote', o ? prevTxt(o) : 'رسالة محذوفة'); q.onclick = ev => { ev.stopPropagation(); const t = els[x.reply_to]; if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }; e.prepend(q); }
           if (grp && x.sender_id !== ME.id) e.prepend(el('div', 'sname', grp.members[x.sender_id] || 'مستخدم'));
         }
@@ -530,7 +596,22 @@ async function groupInfo(id, name, grp) {
   const o = el('div', 'ginfo'), top = el('div', 'gtop'), x = el('button', 'lnk', '✖ إغلاق'), list = el('div'), add = el('div', 'gadd'), pi = el('input'), pb = el('button', 'btn', 'إضافة'), lv = el('button', 'btn ghost', 'مغادرة المجموعة');
   list.style.cssText = 'display:flex;flex-direction:column;gap:8px';
   top.append(el('b', '', name), x); pi.placeholder = 'رقم هاتف العضو الجديد'; pi.inputMode = 'tel'; pi.dir = 'ltr'; add.append(pi, pb);
-  o.append(top, el('p', 'mut', 'الأعضاء'), list, add, lv); document.body.append(o);
+  const pic = el('div'), chg = el('button', 'lnk', '📷 تغيير صورة المجموعة'), pf = el('input'); pf.type = 'file'; pf.accept = 'image/*'; pf.hidden = true; pic.style.cssText = 'display:flex;align-items:center;gap:12px';
+  const drawPic = () => pic.replaceChildren(avatar(name, grp.avatar), chg, pf);
+  chg.onclick = () => pf.click();
+  pf.onchange = async () => {
+    const f = pf.files[0]; pf.value = ''; if (!f) return;
+    try {
+      const blob = await squarePhoto(f), path = ME.id + '/grp-' + id + '.jpg';
+      const r = await raw('/storage/v1/object/avatars/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob });
+      if (!r.ok) throw new Error('تعذّر رفع الصورة');
+      const ap = path + '?v=' + Date.now();
+      await api('/rest/v1/rpc/group_set_avatar', { method: 'POST', body: JSON.stringify({ p_chat: id, p_path: ap }) });
+      grp.avatar = ap; drawPic(); toast('تم تحديث الصورة ✓');
+    } catch (e) { toast(e.message); }
+  };
+  drawPic();
+  o.append(top, pic, el('p', 'mut', 'الأعضاء'), list, add, lv); document.body.append(o);
   x.onclick = () => o.remove();
   let owner = null, rows = [];
   const subUpd = () => { if (CHAT === id) $('#sub').textContent = 'مجموعة · ' + Object.keys(grp.members).length + ' أعضاء'; };
@@ -653,7 +734,9 @@ async function viewMe() {
   };
   const pb = el('button', 'btn', '🔔 تفعيل الإشعارات');
   pb.onclick = async () => { try { await enablePush(); toast('تم تفعيل الإشعارات ✓'); } catch (e) { toast(e.message); } };
-  v.replaceChildren(card, n, ph, opt, pb, sv, out);
+  const dacc = el('button', 'btn ghost', '🗑 حذف الحساب'); dacc.style.color = '#D6334B';
+  dacc.onclick = () => { const t = prompt('هاد بيحذف حسابك ورسائلك وملفاتك نهائياً ولا يمكن التراجع.\nاكتب «حذف» للتأكيد'); if (t && t.trim() === 'حذف') deleteAccount(); };
+  v.replaceChildren(card, n, ph, opt, pb, sv, out, dacc);
   sv.onclick = async () => {
     try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: n.value.trim(), phone: clean(ph.value) || null }) }); toast('تم الحفظ ✓'); }
     catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
