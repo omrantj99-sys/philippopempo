@@ -20,6 +20,8 @@
 .badge.m{background:var(--line);color:var(--mut)}.sbg{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}.sheet{width:100%;background:var(--card);border-radius:22px 22px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}.sheet b{text-align:center}.sheet .btn{background:var(--field);color:var(--ink);border:1.5px solid var(--line)}
 .pop{position:absolute;inset:0;display:grid;place-items:center;font-size:5rem;pointer-events:none;animation:pop .7s ease-out forwards}@keyframes pop{0%{transform:scale(.3);opacity:0}30%{opacity:1;transform:scale(1.2)}100%{transform:scale(1);opacity:0}}
 .sheet.tall{max-height:80vh}.cmts{display:flex;flex-direction:column;gap:12px;overflow:auto;max-height:50vh;min-height:80px}.cm{display:flex;gap:10px;align-items:flex-start}.cm .av{width:34px;height:34px;font-size:.9rem}.cm .grow{flex:1;word-break:break-word}
+.pl{display:flex;flex-direction:column;gap:6px;min-width:220px}.po{display:flex;justify-content:space-between;gap:10px;border:1.5px solid var(--line);border-radius:12px;padding:9px 12px;background:linear-gradient(to left,rgba(77,123,255,.3) var(--p),transparent var(--p));color:inherit;cursor:pointer;font:inherit;text-align:start}.po.on{border-color:var(--pri)}.pc{opacity:.75;font-size:.85rem;white-space:nowrap}
+.sheet input,.sheet textarea{width:100%}.sheet .mini{display:flex;gap:8px;align-items:center}
 .seg{display:flex;gap:6px}.seg button{flex:1;padding:10px;border:1.5px solid var(--line);border-radius:12px;background:var(--field);cursor:pointer;font-weight:700}.seg button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
 .swr{display:flex;gap:8px;flex-wrap:wrap}.sw{width:46px;height:46px;border-radius:12px;border:2px solid var(--line);background:var(--field);cursor:pointer;padding:0}.sw.on{border-color:var(--pri);box-shadow:0 0 0 2px var(--pri)}.sw[data-k=w1]{background:var(--w1)}.sw[data-k=w2]{background:var(--w2)}.sw[data-k=w3]{background:var(--w3)}.sw[data-k=w4]{background:var(--w4)}.sw[data-k=w5]{background:var(--w5)}
 *{box-sizing:border-box;margin:0}
@@ -341,6 +343,7 @@ function msgEl(x, readAt) {
     const a = el('audio'); a.controls = true; a.preload = 'metadata'; a.style.cssText = 'width:230px;max-width:100%';
     imgUrl(x.body).then(u => { a.src = u; }).catch(() => {});
     d.append(a);
+  } else if (x.kind === 'poll') { d.append(el('div', 'pl'));
   } else { d.append(el('span', 'mt', x.body || '')); if (x.edited_at) d.append(el('span', 'ed', '✎ معدّلة')); }
   if (mine) d.append(el('span', 'tick', readAt && readAt >= x.created_at ? '✔✔' : '✔'));
   return d;
@@ -382,11 +385,11 @@ async function myChats() {
   const by = {}; rows.forEach(r => { (by[r.chat_id] = by[r.chat_id] || []).push(r); });
   return Object.keys(by).map(id => {
     const g = G[id] && G[id].is_group ? G[id] : null, oth = by[id].filter(r => r.user_id !== ME.id);
-    return { id, name: g ? (g.title || 'مجموعة') : (oth.map(r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم').join('، ') || 'ملاحظاتي') };
+    return { id, name: (G[id] && G[id].title === SAVED) ? '⭐ الرسائل المحفوظة' : g ? (g.title || 'مجموعة') : (oth.map(r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم').join('، ') || 'ملاحظاتي') };
   });
 }
 async function sendFwd(x, to) {
-  let body = x.body; const kind = x.kind || 'text';
+  let body = x.body; const kind = x.kind === 'poll' ? 'text' : (x.kind || 'text');
   if (kind === 'image' || kind === 'audio') {
     const ext = (String(x.body).match(/\.[a-z0-9]+$/i) || ['.bin'])[0], dst = to + '/' + crypto.randomUUID() + ext;
     const r = await raw('/storage/v1/object/copy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bucketId: 'chat-media', sourceKey: x.body, destinationKey: dst }) });
@@ -441,7 +444,76 @@ async function deleteAccount() {
   } catch (e) { toast(e.message); }
 }
 
+const SAVED = '__saved__';
 let SHOWARCH = false;
+function sheetOf(title) { const bg = el('div', 'sbg'), sh = el('div', 'sheet tall'); sh.append(el('b', '', title)); bg.append(sh); bg.onclick = e => { if (e.target === bg) bg.remove(); }; document.body.append(bg); return { bg, sh }; }
+function chatPlus(chatId, inp, reload) {
+  const { bg, sh } = sheetOf('المزيد'), pb = el('button', 'btn', '📊 استطلاع جديد'), sb = el('button', 'btn', '⏰ جدولة رسالة');
+  pb.onclick = () => { bg.remove(); pollForm(chatId, reload); }; sb.onclick = () => { bg.remove(); scheduleForm(chatId, inp); };
+  sh.append(pb, sb);
+}
+function drawPoll(e, x, opts, votes, chatId, reload) {
+  const box = e.querySelector('.pl'); if (!box) return;
+  const title = String(x.body || '').replace(/^📊\s*/, '');
+  if (!opts) { box.textContent = '📊 ' + title; return; }
+  const tot = votes.length, mine = (votes.find(v => v.user_id === ME.id) || {}).opt;
+  box.replaceChildren(el('b', '', '📊 ' + title), ...opts.map((o, i) => {
+    const n = votes.filter(v => v.opt === i).length, pct = tot ? Math.round(n * 100 / tot) : 0, b = el('button', 'po' + (mine === i ? ' on' : ''));
+    b.style.setProperty('--p', pct + '%'); b.append(el('span', '', (mine === i ? '✔ ' : '') + o), el('span', 'pc', n + ' · ' + pct + '%'));
+    b.onclick = async ev => {
+      ev.stopPropagation();
+      try {
+        if (mine === i) await api('/rest/v1/poll_votes?message_id=eq.' + x.id + '&user_id=eq.' + ME.id, { method: 'DELETE' });
+        else await api('/rest/v1/poll_votes?on_conflict=message_id,user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ message_id: x.id, chat_id: chatId, opt: i }) });
+        reload();
+      } catch (er) { toast(er.message); }
+    };
+    return b;
+  }), el('div', 'mut', tot + ' صوت'));
+}
+function pollForm(chatId, reload) {
+  const { bg, sh } = sheetOf('استطلاع جديد'), q = el('input'), opts = [el('input'), el('input')], wrap = el('div'), add = el('button', 'btn ghost', '+ خيار'), ok = el('button', 'btn', 'نشر الاستطلاع');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px'; q.placeholder = 'السؤال'; q.maxLength = 200;
+  opts.forEach((o, k) => { o.placeholder = 'خيار ' + (k + 1); o.maxLength = 80; wrap.append(o); });
+  add.onclick = () => { if (opts.length >= 6) return; const o = el('input'); o.placeholder = 'خيار ' + (opts.length + 1); o.maxLength = 80; opts.push(o); wrap.append(o); if (opts.length >= 6) add.hidden = true; };
+  ok.onclick = async () => {
+    const t = q.value.trim(), os = opts.map(o => o.value.trim()).filter(Boolean);
+    if (!t) return toast('اكتب السؤال'); if (os.length < 2) return toast('لازم خيارين على الأقل');
+    ok.disabled = true;
+    try {
+      const m = await api('/rest/v1/messages', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ chat_id: chatId, kind: 'poll', body: '📊 ' + t }) });
+      try { await api('/rest/v1/polls', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ message_id: m[0].id, chat_id: chatId, options: os }) }); }
+      catch (e) { await api('/rest/v1/messages?id=eq.' + m[0].id, { method: 'DELETE' }).catch(() => {}); throw e; }
+      bg.remove(); reload();
+    } catch (e) { ok.disabled = false; toast(e.message); }
+  };
+  sh.append(q, wrap, add, ok);
+}
+async function scheduleForm(chatId, inp) {
+  const { bg, sh } = sheetOf('جدولة رسالة'), t = el('textarea'), d = el('input'), ok = el('button', 'btn', 'جدولة'), list = el('div');
+  t.rows = 3; t.placeholder = 'نص الرسالة'; t.value = inp.value; t.maxLength = 2000; d.type = 'datetime-local'; list.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+  const pad = n => String(n).padStart(2, '0'), f = x => x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()) + 'T' + pad(x.getHours()) + ':' + pad(x.getMinutes());
+  d.min = f(new Date(Date.now() + 60000)); d.value = f(new Date(Date.now() + 5 * 60000));
+  const loadL = async () => {
+    try {
+      const r = await api('/rest/v1/scheduled_messages?chat_id=eq.' + chatId + '&select=id,body,send_at&order=send_at.asc');
+      list.replaceChildren(...(r.length ? [el('div', 'mut', 'مجدولة بانتظار الإرسال:')] : []), ...r.map(m => {
+        const row = el('div', 'mini'), tx = el('span', '', new Date(m.send_at).toLocaleString('ar') + ' — ' + m.body.slice(0, 40)), del = el('button', 'lnk', '🗑'); tx.style.flex = '1';
+        del.onclick = async () => { try { await api('/rest/v1/scheduled_messages?id=eq.' + m.id, { method: 'DELETE' }); loadL(); } catch (e) { toast(e.message); } };
+        row.append(tx, del); return row;
+      }));
+    } catch (e) {}
+  };
+  ok.onclick = async () => {
+    const body = t.value.trim(), when = new Date(d.value);
+    if (!body) return toast('اكتب الرسالة'); if (!d.value || when.getTime() < Date.now() + 30000) return toast('اختر وقت بالمستقبل');
+    ok.disabled = true;
+    try { await api('/rest/v1/scheduled_messages', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ chat_id: chatId, body, send_at: when.toISOString() }) }); if (inp.value.trim() === body) inp.value = ''; t.value = ''; toast('تمت الجدولة ✓'); loadL(); }
+    catch (e) { toast(e.message); }
+    ok.disabled = false;
+  };
+  sh.append(t, d, ok, list); loadL();
+}
 function chatMenu(title, pf, set) {
   const bg = el('div', 'sbg'), sh = el('div', 'sheet'), add = (t, k) => { const b = el('button', 'btn', t); b.onclick = () => { bg.remove(); set(k, !pf[k]); }; sh.append(b); };
   sh.append(el('b', '', title)); add(pf.pinned ? '📌 إلغاء التثبيت' : '📌 تثبيت', 'pinned'); add(pf.muted ? '🔔 إلغاء الكتم' : '🔕 كتم', 'muted'); add(pf.archived ? '📦 إلغاء الأرشفة' : '📦 أرشفة', 'archived');
@@ -470,7 +542,8 @@ async function viewChats() {
       const g = G[id] && G[id].is_group ? G[id] : null;
       const oth = by[id].filter(r => r.user_id !== ME.id);
       const pn = r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم';
-      const names = g ? (g.title || 'مجموعة') : (oth.map(pn).join('، ') || 'ملاحظاتي');
+      const saved = !g && G[id] && G[id].title === SAVED;
+      const names = saved ? '⭐ الرسائل المحفوظة' : g ? (g.title || 'مجموعة') : (oth.map(pn).join('، ') || 'ملاحظاتي');
       const b = el('button', 'row'); b.dataset.n = names.toLowerCase();
       const dm = !g && oth.length === 1;
       b.append(avatar(names, g ? g.avatar_path : (dm && oth[0].profiles ? oth[0].profiles.avatar_path : null)), el('div', 'grow', names));
@@ -484,7 +557,7 @@ async function viewChats() {
       ['touchend', 'touchmove', 'touchcancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(lp), { passive: true }));
       b.oncontextmenu = e => { e.preventDefault(); menu(); };
       const mem = {}; by[id].forEach(r => { mem[r.user_id] = pn(r); });
-      b.onclick = () => { if (fired) { fired = false; return; } openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem, avatar: g.avatar_path } : null); }; return b;
+      b.onclick = () => { if (fired) { fired = false; return; } openChat(id, names, dm ? oth[0].user_id : null, g ? { members: mem, avatar: g.avatar_path } : null, saved); }; return b;
     });
     const arch = items.filter(b => b.dataset.a), shown = items.filter(b => (!b.dataset.a) !== SHOWARCH).sort((a, b) => (b.dataset.p ? 1 : 0) - (a.dataset.p ? 1 : 0));
     const top = el('button', 'row'); top.hidden = !SHOWARCH && !arch.length; top.append(el('div', 'grow', SHOWARCH ? '⬅️ كل المحادثات' : '📦 المؤرشفة (' + arch.length + ')')); top.onclick = () => { SHOWARCH = !SHOWARCH; viewChats(); };
@@ -494,15 +567,16 @@ async function viewChats() {
   } catch (e) { v.replaceChildren(empty('تعذّر تحميل المحادثات', e.message)); }
 }
 
-function openChat(id, name, otherId, grp) {
+function openChat(id, name, otherId, grp, saved) {
   CHAT = id; $('#title').textContent = name;
   const cbtn = $('#callbtn'); cbtn.hidden = false; cbtn.onclick = () => startCall(id, name); const vbtn = $('#vcallbtn'); vbtn.hidden = false; vbtn.onclick = () => startCall(id, name, null, true);
   if (grp) $('#sub').textContent = 'مجموعة · ' + Object.keys(grp.members).length + ' أعضاء';
   const ibtn = $('#infobtn'); ibtn.hidden = !grp && !otherId; ibtn.onclick = grp ? () => groupInfo(id, name, grp) : () => dmInfo(otherId, name);
+  if (saved) { cbtn.hidden = true; vbtn.hidden = true; $('#sub').textContent = 'مساحتك الخاصة'; }
   const v = $('#view'), box = el('div', 'msgs'), bar = el('div', 'bar'), inp = el('input'),
         send = el('button', 'btn', 'إرسال'), att = el('button', 'btn ghost att', '📷'), mic = el('button', 'btn ghost att', '🎤'), cancel = el('button', 'btn ghost att', '✖'), file = el('input');
   file.type = 'file'; file.accept = 'image/*'; file.hidden = true; att.onclick = () => file.click();
-  inp.placeholder = 'اكتب رسالة…'; bar.append(att, mic, inp, send, cancel, file); cancel.hidden = true;
+  inp.placeholder = 'اكتب رسالة…'; const plus = el('button', 'btn ghost att', '➕'); plus.onclick = () => chatPlus(id, inp, () => load()); bar.append(att, plus, mic, inp, send, cancel, file); cancel.hidden = true;
   const typ = el('div', 'mut'); typ.style.cssText = 'min-height:18px;font-size:.82rem'; let reply = null; const rbar = el('div', 'rbar'), rtx = el('span'), rcl = el('button', '', '✖'); rbar.append(rtx, rcl); rbar.hidden = true;
   const rp = () => (reply ? { reply_to: reply } : {});
   let editing = null;
@@ -536,16 +610,19 @@ function openChat(id, name, otherId, grp) {
   let tt, lastT = 0;
   const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
   inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
-  let seen = -1, RX = {}; const els = {};
+  let seen = -1, RX = {}, PL = {}, PV = {}; const els = {};
   const load = async () => {
     if (CHAT !== id) return;
     try {
-      const [m, mem, rx] = await Promise.all([
+      const [m, mem, rx, pl, pv] = await Promise.all([
         api(`/rest/v1/messages?chat_id=eq.${id}&order=created_at.asc&select=id,sender_id,body,kind,created_at,reply_to,edited_at`),
         api(`/rest/v1/chat_members?chat_id=eq.${id}&user_id=neq.${ME.id}&select=last_read_at`),
-        api(`/rest/v1/message_reactions?chat_id=eq.${id}&select=message_id,user_id,emoji`).catch(() => [])
+        api(`/rest/v1/message_reactions?chat_id=eq.${id}&select=message_id,user_id,emoji`).catch(() => []),
+        api(`/rest/v1/polls?chat_id=eq.${id}&select=message_id,options`).catch(() => []),
+        api(`/rest/v1/poll_votes?chat_id=eq.${id}&select=message_id,user_id,opt`).catch(() => [])
       ]);
       RX = {}; rx.forEach(r => { (RX[r.message_id] = RX[r.message_id] || []).push(r); });
+      PL = {}; pl.forEach(r => { PL[r.message_id] = r.options; }); PV = {}; pv.forEach(r => { (PV[r.message_id] = PV[r.message_id] || []).push(r); });
       const lr = r => r.last_read_at || '';
       const readAt = grp ? (mem.length ? mem.reduce((a, r) => (lr(r) < a ? lr(r) : a), lr(mem[0])) : '') : mem.reduce((a, r) => (lr(r) > a ? lr(r) : a), '');
       if (otherId && !PROF.hide_last_seen) api('/rest/v1/profiles?id=eq.' + otherId + '&select=last_seen').then(p => { if (CHAT === id) $('#sub').textContent = seenText(p[0] && p[0].last_seen); }).catch(() => {});
@@ -562,6 +639,7 @@ function openChat(id, name, otherId, grp) {
         const mt = e.querySelector('.mt');
         if (mt) { if (mt.textContent !== (x.body || '')) mt.textContent = x.body || ''; const ed = e.querySelector('.ed'); if (x.edited_at && !ed) mt.after(el('span', 'ed', '✎ معدّلة')); }
         drawRx(e, RX[x.id] || []);
+        if (x.kind === 'poll') drawPoll(e, x, PL[x.id], PV[x.id] || [], id, load);
         const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
       });
       Object.keys(els).forEach(k => { if (!byId[k]) { els[k].remove(); delete els[k]; } });
@@ -734,7 +812,15 @@ function viewNew() {
       openChat(id, title, null, { members });
     } catch (e) { toast(e.message); }
   };
-  v.replaceChildren(el('p', 'mut', 'ابحث عن صديق برقم هاتفه المسجّل في حسابه.'), i, b, gt, gn, gp, ga, gl, gb);
+  const svb = el('button', 'btn ghost', '⭐ الرسائل المحفوظة');
+  svb.onclick = async () => {
+    try {
+      const r = await api('/rest/v1/chats?title=eq.' + SAVED + '&select=id&limit=1'); let id = r[0] && r[0].id;
+      if (!id) { id = crypto.randomUUID(); await api('/rest/v1/chats', { method: 'POST', body: JSON.stringify({ id, title: SAVED }) }); await api('/rest/v1/chat_members', { method: 'POST', body: JSON.stringify({ chat_id: id, user_id: ME.id }) }); }
+      openChat(id, '⭐ الرسائل المحفوظة', null, null, true);
+    } catch (e) { toast(e.message); }
+  };
+  v.replaceChildren(el('p', 'mut', 'ابحث عن صديق برقم هاتفه المسجّل في حسابه.'), i, b, svb, gt, gn, gp, ga, gl, gb);
   b.onclick = async () => {
     const p = clean(i.value); if (!p) return;
     try {
