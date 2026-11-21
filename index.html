@@ -74,7 +74,14 @@ header b{font-size:1.1rem}
 .av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;background:linear-gradient(135deg,var(--pri),var(--acc));flex:none;overflow:hidden}
 .prof{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px}.prof .av{width:72px;height:72px;font-size:1.8rem}
 .msgs{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px;min-height:0}
-.msg{max-width:80%;padding:9px 13px;border-radius:18px;line-height:1.5;word-break:break-word;cursor:pointer}
+.msg{position:relative;max-width:80%;padding:9px 13px;border-radius:18px;line-height:1.5;word-break:break-word;cursor:pointer}
+.msg.me::after,.msg.th::after{content:'';position:absolute;bottom:0;width:10px;height:12px;background:inherit}
+.msg.me::after{right:-5px;clip-path:polygon(0 0,100% 100%,0 100%)}
+.msg.th::after{left:-5px;clip-path:polygon(100% 0,0 100%,100% 100%)}
+.meta{font-size:.7rem;opacity:.75;margin-top:3px;display:flex;gap:4px;align-items:center}.meta .tick{margin:0;font-size:inherit;opacity:1}
+.typing{display:flex;gap:4px;padding:12px 14px;width:max-content;margin-inline-start:auto;cursor:default}.typing i{width:7px;height:7px;border-radius:50%;background:var(--mut);animation:bn 1.2s infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bn{0%,60%,100%{transform:none;opacity:.45}30%{transform:translateY(-4px);opacity:1}}
+header .av{width:38px;height:38px;font-size:.95rem}
 .msg.me{align-self:flex-start;background:var(--pri);color:#fff;border-end-start-radius:5px}
 .msg.th{align-self:flex-end;background:var(--card);border-end-end-radius:5px}
 .bar{display:flex;gap:8px}.bar .btn{width:auto;padding:0 18px}
@@ -305,6 +312,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { pi
 /* ---------- App views ---------- */
 function setNavBadge(n) { const b = $('#nbchats'); if (!b) return; b.hidden = !n; b.textContent = n > 99 ? '99+' : n; }
 function tab(n) {
+  { const h = $('#hav'); if (h) h.remove(); const lg = document.querySelector('header .logo'); if (lg) lg.style.display = ''; }
   $('#view').style.cssText = '';
   if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = ''; $('#callbtn').hidden = true; $('#vcallbtn').hidden = true; $('#infobtn').hidden = true; $('#sbtn').hidden = true;
   document.querySelectorAll('.nav button').forEach(b => { const on = b.dataset.t === n; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
@@ -348,7 +356,9 @@ function msgEl(x, readAt) {
     d.append(a);
   } else if (x.kind === 'poll') { d.append(el('div', 'pl'));
   } else { d.append(el('span', 'mt', x.body || '')); if (x.edited_at) d.append(el('span', 'ed', '✎ معدّلة')); }
-  if (mine) d.append(el('span', 'tick', readAt && readAt >= x.created_at ? '✔✔' : '✔'));
+  const meta = el('div', 'meta'); meta.append(el('span', '', new Date(x.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
+  if (mine) { meta.append(el('span', '', '·'), el('span', 'tick', readAt && readAt >= x.created_at ? 'تمت القراءة' : 'تم التسليم')); }
+  d.append(meta);
   return d;
 }
 
@@ -573,6 +583,8 @@ async function viewChats() {
 
 function openChat(id, name, otherId, grp, saved) {
   CHAT = id; $('#title').textContent = name;
+  { const h = document.querySelector('header'), lg = h.querySelector('.logo'), old = $('#hav'); if (old) old.remove(); lg.style.display = 'none'; const av = avatar(name, grp ? grp.avatar : null); av.id = 'hav'; lg.after(av);
+    if (otherId) api('/rest/v1/profiles?id=eq.' + otherId + '&select=avatar_path').then(p => { if (CHAT === id && p[0] && p[0].avatar_path) { const a2 = avatar(name, p[0].avatar_path); a2.id = 'hav'; const o = $('#hav'); if (o) o.replaceWith(a2); } }).catch(() => {}); }
   const cbtn = $('#callbtn'); cbtn.hidden = false; cbtn.onclick = () => startCall(id, name); const vbtn = $('#vcallbtn'); vbtn.hidden = false; vbtn.onclick = () => startCall(id, name, null, true);
   if (grp) $('#sub').textContent = 'مجموعة · ' + Object.keys(grp.members).length + ' أعضاء';
   const ibtn = $('#infobtn'); ibtn.hidden = !grp && !otherId; ibtn.onclick = grp ? () => groupInfo(id, name, grp) : () => dmInfo(otherId, name);
@@ -612,7 +624,7 @@ function openChat(id, name, otherId, grp, saved) {
   sbtn.onclick = () => { sb.hidden = !sb.hidden; if (sb.hidden) { clearHits(); si.value = ''; } else si.focus(); }; sx.onclick = sbtn.onclick;
   v.replaceChildren(sb, box, typ, rbar, bar);
   let tt, lastT = 0;
-  const showTyping = () => { typ.textContent = 'يكتب الآن…'; clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
+  const showTyping = () => { if (!typ.querySelector('.typing')) { const b = el('div', 'msg th typing'); b.append(el('i'), el('i'), el('i')); typ.replaceChildren(b); } clearTimeout(tt); tt = setTimeout(() => { typ.textContent = ''; }, 3000); };
   inp.oninput = () => { const n = Date.now(); if (n - lastT > 2000) { lastT = n; rtTyping(); } };
   let seen = -1, RX = {}, PL = {}, PV = {}; const els = {};
   const load = async () => {
@@ -644,7 +656,7 @@ function openChat(id, name, otherId, grp, saved) {
         if (mt) { if (mt.textContent !== (x.body || '')) mt.textContent = x.body || ''; const ed = e.querySelector('.ed'); if (x.edited_at && !ed) mt.after(el('span', 'ed', '✎ معدّلة')); }
         drawRx(e, RX[x.id] || []);
         if (x.kind === 'poll') drawPoll(e, x, PL[x.id], PV[x.id] || [], id, load);
-        const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? '✔✔' : '✔';
+        const t = e.querySelector('.tick'); if (t) t.textContent = readAt && readAt >= x.created_at ? 'تمت القراءة' : 'تم التسليم';
       });
       Object.keys(els).forEach(k => { if (!byId[k]) { els[k].remove(); delete els[k]; } });
       if (near) { box.scrollTop = box.scrollHeight; box.dataset.s = 1; }
