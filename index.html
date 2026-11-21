@@ -64,9 +64,11 @@ h1{font-weight:800;font-size:1.7rem;letter-spacing:.5px}
 header{display:flex;gap:10px;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--card);border-bottom:1px solid var(--line)}
 header b{font-size:1.1rem}
 #view{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}
-.nav{display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
-.nav button{flex:1;border:0;background:0;padding:10px 0 8px;color:var(--mut);font-size:.8rem;cursor:pointer;display:flex;flex-direction:column;gap:2px;align-items:center}
-.nav button span{font-size:1.25rem}.nav button.on{color:var(--pri);font-weight:800}
+.nav{position:relative;display:flex;margin:6px 14px calc(10px + env(safe-area-inset-bottom));padding:6px;border-radius:999px;background:color-mix(in srgb,var(--card) 82%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.16)}
+.nav button{flex:1;position:relative;border:0;background:0;padding:6px 0;color:var(--mut);font:inherit;font-size:.72rem;cursor:pointer;display:flex;flex-direction:column;gap:2px;align-items:center;-webkit-tap-highlight-color:transparent}
+.nav button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav button.on{color:var(--pri);font-weight:800}
+.nav .nb{position:absolute;top:0;left:calc(50% + 2px);min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#E5384F;color:#fff;font-size:.68rem;font-weight:800;font-style:normal;display:grid;place-items:center;line-height:1}.nav .nb[hidden]{display:none}
 .row{display:flex;gap:12px;align-items:center;width:100%;text-align:start;padding:12px;border:0;border-radius:16px;background:var(--card);cursor:pointer}
 .row .grow{flex:1;font-weight:600}
 .av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;background:linear-gradient(135deg,var(--pri),var(--acc));flex:none;overflow:hidden}
@@ -122,11 +124,11 @@ header b{font-size:1.1rem}
   <header><svg class="logo sm"><use href="#logo"/></svg><div><b id="title"></b><div id="sub" class="mut" style="font-size:.78rem;min-height:1em"></div></div><button id="callbtn" hidden title="مكالمة صوتية">📞</button><button id="vcallbtn" hidden title="مكالمة فيديو">🎥</button><button id="sbtn" hidden title="بحث">🔍</button><button id="infobtn" hidden title="معلومات المحادثة">ℹ️</button></header>
   <section id="view"></section>
   <nav class="nav">
-    <button data-t="chats"><span>💬</span>المحادثات</button>
-    <button data-t="status"><span>🟢</span>الحالة</button>
-    <button data-t="reels"><span>🎬</span>ريلز</button>
-    <button data-t="new"><span>➕</span>جديد</button>
-    <button data-t="me"><span>👤</span>حسابي</button>
+    <button data-t="chats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><i class="nb" id="nbchats" hidden></i>المحادثات</button>
+    <button data-t="status"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="3"/></svg>الحالة</button>
+    <button data-t="reels"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M10 9.5v5l4.5-2.5z"/></svg>ريلز</button>
+    <button data-t="new"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>جديد</button>
+    <button data-t="me"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c1-4 4-6 8-6s7 2 8 6"/></svg>حسابي</button>
   </nav>
 </div>
 <div id="toast" role="status"></div>
@@ -301,10 +303,11 @@ function startPresence() { clearInterval(PRES); PRES = setInterval(() => { if (!
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { ping(); pollCalls(); } });
 
 /* ---------- App views ---------- */
+function setNavBadge(n) { const b = $('#nbchats'); if (!b) return; b.hidden = !n; b.textContent = n > 99 ? '99+' : n; }
 function tab(n) {
   $('#view').style.cssText = '';
   if (STOPREC) { STOPREC(); STOPREC = null; } clearInterval(POLL); rtStop(); CHAT = null; $('#sub').textContent = ''; $('#callbtn').hidden = true; $('#vcallbtn').hidden = true; $('#infobtn').hidden = true; $('#sbtn').hidden = true;
-  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.t === n));
+  document.querySelectorAll('.nav button').forEach(b => { const on = b.dataset.t === n; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   $('#title').textContent = { chats: 'المحادثات', status: 'الحالة', reels: 'ريلز', new: 'محادثة جديدة', me: 'حسابي' }[n];
   ({ chats: viewChats, status: viewStatus, reels: viewReels, new: viewNew, me: viewMe })[n]();
 }
@@ -536,6 +539,7 @@ async function viewChats() {
     } catch (e) {}
     let P = {};
     try { (await api('/rest/v1/chat_prefs?select=chat_id,pinned,muted,archived')).forEach(r => { P[r.chat_id] = r; }); } catch (e) {}
+    setNavBadge(Object.keys(unread).reduce((t, id) => t + ((P[id] && P[id].muted) ? 0 : unread[id]), 0));
     const q = el('input'), list = el('div');
     q.placeholder = 'ابحث في المحادثات…'; list.style.cssText = 'display:flex;flex-direction:column;gap:10px';
     const items = ids.map(id => {
