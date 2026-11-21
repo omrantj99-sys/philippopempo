@@ -126,6 +126,7 @@ header .av{width:38px;height:38px;font-size:.95rem}
       <input id="lemail" type="email" placeholder="البريد الإلكتروني" dir="ltr" autocomplete="email">
       <div class="pwr"><input id="lpass" type="password" placeholder="كلمة السر" dir="ltr" autocomplete="current-password"><button type="button" data-eye="lpass" aria-label="إظهار/إخفاء">👁</button></div>
       <button class="btn" id="lgo">تسجيل الدخول</button>
+      <button type="button" class="lnk" id="fgt" style="font-size:.85rem">نسيت كلمة السر؟</button>
     </div>
     <div class="pane" id="pReg" hidden>
       <input id="email" type="email" placeholder="you@gmail.com" dir="ltr" autocomplete="email">
@@ -154,6 +155,19 @@ header .av{width:38px;height:38px;font-size:.95rem}
     <p class="err" id="smsg"></p>
     <button class="btn" id="sgo">حفظ ومتابعة</button>
     <button class="lnk" id="sout">تسجيل الخروج</button>
+  </main>
+</div>
+
+<div id="reset" class="auth" hidden>
+  <div class="blob b1"></div><div class="blob b2"></div>
+  <main class="card">
+    <svg class="logo"><use href="#logo"/></svg>
+    <div class="hero"><h2>كلمة سر جديدة</h2><p>اختر كلمة سر جديدة لحسابك</p></div>
+    <div class="fld"><label for="rp1">كلمة السر الجديدة</label><div class="pwr"><input id="rp1" type="password" dir="ltr" placeholder="8 أحرف على الأقل" autocomplete="new-password"><button type="button" data-eye="rp1" aria-label="إظهار/إخفاء">👁</button></div></div>
+    <div class="fld"><label for="rp2">تأكيد كلمة السر</label><div class="pwr"><input id="rp2" type="password" dir="ltr" placeholder="أعد كتابتها" autocomplete="new-password"><button type="button" data-eye="rp2" aria-label="إظهار/إخفاء">👁</button></div></div>
+    <p class="err" id="rmsg"></p>
+    <button class="btn" id="rgo">حفظ كلمة السر</button>
+    <button class="lnk" id="rout">إلغاء</button>
   </main>
 </div>
 
@@ -233,7 +247,7 @@ async function api(path, o) {
   if (!r.ok) throw new Error(msgOf(d) || 'حدث خطأ غير متوقع.');
   return d;
 }
-const show = v => { $('#auth').hidden = v !== 'auth'; $('#setup').hidden = v !== 'setup'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); clearInterval(PRES); rtStop(); renderAuth(); } };
+const show = v => { $('#auth').hidden = v !== 'auth'; $('#setup').hidden = v !== 'setup'; $('#reset').hidden = v !== 'reset'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); clearInterval(PRES); rtStop(); renderAuth(); } };
 
 /* ---------- Auth ---------- */
 function setMode(m) {
@@ -942,7 +956,8 @@ async function viewMe() {
     swr.append(b);
   });
   look.append(el('div', 'mut', 'المظهر'), seg, el('div', 'mut', 'خلفية المحادثة'), swr);
-  v.replaceChildren(card, n, ph, opt, look, pb, sv, out, dacc);
+  const pwb = el('button', 'btn ghost', '🔑 تغيير كلمة السر'); pwb.style.color = 'var(--pri)'; pwb.onclick = changePwSheet;
+  v.replaceChildren(card, n, ph, opt, look, pwb, pb, sv, out, dacc);
   sv.onclick = async () => {
     try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: n.value.trim(), phone: clean(ph.value) || null }) }); toast('تم الحفظ ✓'); }
     catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
@@ -1230,7 +1245,7 @@ async function startCall(chatId, name, callId, video) {
   end.onclick = finish;
   const draw = () => {
     if (!room) return;
-    const sp = new Set(room.activeSpeakers.map(p => p.identity));
+    const sp = new Set(room.activeSpeakers.map(p => p.identity)), all = [room.localParticipant, ...room.remoteParticipants.values()];
     list.replaceChildren(...all.map(p => el('div', sp.has(p.identity) ? 'sp' : '', (p === room.localParticipant ? 'أنا' : (p.name || 'مستخدم')) + (sp.has(p.identity) ? ' 🔊' : ''))));
   };
   const onRemote = () => {
@@ -1317,6 +1332,73 @@ async function enablePush() {
 }
 
 /* ---------- Boot ---------- */
+let REC = false;
+const pwOk = (a, b) => (a.length < 8 ? 'كلمة السر لازم تكون 8 أحرف على الأقل' : a !== b ? 'كلمتا السر غير متطابقتين' : '');
+const pwErr = e => (/weak|short|least/i.test(e.message) ? 'كلمة السر ضعيفة، جرّب كلمة أطول' : /different|same/i.test(e.message) ? 'اختر كلمة سر مختلفة عن القديمة' : e.message);
+const liveMatch = (a, b, m) => () => { if (!b.value) { m.textContent = ''; return; } const ok = a.value === b.value; m.className = 'err' + (ok ? ' okk' : ''); m.textContent = ok ? '✓ كلمتا السر متطابقتان' : 'كلمتا السر غير متطابقتين'; };
+function forgotSheet(pre) {
+  const { bg, sh } = sheetOf('استعادة كلمة السر');
+  const msg = el('p', 'mut', 'اكتب بريدك ونرسل لك رسالة فيها رابط (أو رمز) لتعيين كلمة سر جديدة.'), em = el('input'), go = el('button', 'btn', 'أرسل الرسالة'),
+        code = el('input'), vb = el('button', 'btn', 'تأكيد الرمز'), tg = el('button', 'lnk', '✈️ حسابي عبر Telegram: ادخل مباشرة');
+  em.type = 'email'; em.dir = 'ltr'; em.placeholder = 'البريد الإلكتروني'; em.value = pre || ''; em.autocomplete = 'email';
+  code.inputMode = 'numeric'; code.dir = 'ltr'; code.placeholder = 'الرمز من الرسالة (إن وصلك)'; code.hidden = vb.hidden = true;
+  tg.onclick = () => { bg.remove(); $('#t').click(); };
+  sh.append(msg, em, go, code, vb, tg);
+  const mail = () => em.value.trim();
+  go.onclick = async () => {
+    if (!/^\S+@\S+\.\S+$/.test(mail())) return toast('أدخل بريداً إلكترونياً صحيحاً');
+    go.disabled = true;
+    try {
+      await api('/auth/v1/recover' + (location.protocol === 'file:' ? '' : '?redirect_to=' + encodeURIComponent(location.origin + location.pathname)), { method: 'POST', body: JSON.stringify({ email: mail() }) });
+      msg.textContent = 'إذا كان هالبريد مسجّلاً عندنا فقد أرسلنا له رسالة. افتح الرابط منها، أو اكتب الرمز هون.'; code.hidden = vb.hidden = false; go.textContent = 'إعادة الإرسال';
+    } catch (e) { toast(e.message); }
+    go.disabled = false;
+  };
+  vb.onclick = async () => {
+    const token = code.value.trim(); if (!/^\d{6,8}$/.test(token)) return toast('أدخل الرمز كما وصلك');
+    vb.disabled = true;
+    try { const d = await api('/auth/v1/verify', { method: 'POST', body: JSON.stringify({ type: 'recovery', email: mail(), token }) }); REC = true; save(d); bg.remove(); await boot(); }
+    catch (e) { toast(e.message); }
+    vb.disabled = false;
+  };
+}
+$('#fgt').onclick = () => forgotSheet($('#lemail').value.trim());
+function showReset() { $('#rp1').value = $('#rp2').value = ''; $('#rmsg').textContent = ''; show('reset'); }
+$('#rp2').oninput = liveMatch($('#rp1'), $('#rp2'), $('#rmsg'));
+$('#rout').onclick = () => { save(null); ME = null; show('auth'); };
+$('#rgo').onclick = async () => {
+  const m = $('#rmsg'), bad = pwOk($('#rp1').value, $('#rp2').value); m.className = 'err'; if (bad) return (m.textContent = bad);
+  $('#rgo').disabled = true; m.textContent = '';
+  try { await api('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: $('#rp1').value }) }); toast('تم تغيير كلمة السر ✓'); await boot(); }
+  catch (e) { m.textContent = pwErr(e); }
+  $('#rgo').disabled = false;
+};
+function changePwSheet() {
+  const { bg, sh } = sheetOf('تغيير كلمة السر');
+  const old = el('input'), chk = el('button', 'btn', 'تحقق'), fg = el('button', 'lnk', 'نسيت كلمة السر الحالية؟'), box = el('div', 'pane'),
+        n1 = el('input'), n2 = el('input'), msg = el('p', 'err'), sv = el('button', 'btn', 'حفظ كلمة السر');
+  [old, n1, n2].forEach(i => { i.type = 'password'; i.dir = 'ltr'; });
+  old.placeholder = 'كلمة السر الحالية'; old.autocomplete = 'current-password'; n1.placeholder = 'كلمة السر الجديدة (8 أحرف على الأقل)'; n2.placeholder = 'أعد كتابة كلمة السر الجديدة'; n1.autocomplete = n2.autocomplete = 'new-password';
+  box.hidden = true; box.append(n1, n2, msg, sv); sh.append(old, chk, fg, box);
+  n2.oninput = liveMatch(n1, n2, msg);
+  fg.onclick = () => { bg.remove(); forgotSheet(ME.email || ''); };
+  chk.onclick = async () => {
+    if (!old.value) return toast('اكتب كلمة السر الحالية');
+    chk.disabled = true;
+    try {
+      const d = await api('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: ME.email, password: old.value }) });
+      save(d); old.disabled = true; chk.hidden = fg.hidden = true; box.hidden = false; n1.focus();
+    } catch (e) { toast(/invalid|credentials/i.test(e.message) ? 'كلمة السر الحالية غير صحيحة' : e.message); }
+    chk.disabled = false;
+  };
+  sv.onclick = async () => {
+    const bad = pwOk(n1.value, n2.value); msg.className = 'err'; if (bad) return (msg.textContent = bad);
+    sv.disabled = true; msg.textContent = '';
+    try { await api('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: n1.value }) }); bg.remove(); toast('تم تغيير كلمة السر ✓'); }
+    catch (e) { msg.textContent = pwErr(e); }
+    sv.disabled = false;
+  };
+}
 function enterApp() { show('app'); tab('chats'); ping(); startPresence(); }
 function showSetup() {
   const md = (ME && ME.user_metadata) || {}, full = String(md.full_name || md.name || PROF.name || '').trim();
@@ -1345,12 +1427,15 @@ $('#sgo').onclick = async () => {
 async function boot() {
   if (location.hash.includes('access_token')) {
     const p = new URLSearchParams(location.hash.slice(1));
+    if (p.get('type') === 'recovery') REC = true;
     if (p.get('access_token')) save({ access_token: p.get('access_token'), refresh_token: p.get('refresh_token') });
     history.replaceState(null, '', location.pathname + location.search);
   }
+  if (location.hash.includes('error_code')) { toast('الرابط منتهي أو غير صالح، اطلب رابطاً جديداً'); history.replaceState(null, '', location.pathname + location.search); }
   if (!S) return show('auth');
   try { ME = await api('/auth/v1/user'); } catch (e) { save(null); return show('auth'); }
   try { PROF = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone,avatar_path,hide_last_seen'))[0] || {}; } catch (e) { PROF = {}; }
+  if (REC) { REC = false; return showReset(); }
   if (!(ME.user_metadata && ME.user_metadata.setup_done)) return showSetup();
   enterApp();
 }
