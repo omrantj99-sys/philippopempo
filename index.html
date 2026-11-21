@@ -102,6 +102,15 @@ header .av{width:38px;height:38px;font-size:.95rem}
 #infobtn,#vcallbtn,#sbtn{border:0;background:0;font-size:1.3rem;cursor:pointer}.ginfo{position:fixed;inset:0;z-index:55;background:var(--bg);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 16px calc(14px + env(safe-area-inset-bottom));gap:10px;overflow:auto}.ginfo .gtop{display:flex;align-items:center;justify-content:space-between;gap:10px}.ginfo .gmem{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:14px;padding:10px 12px}.ginfo .gmem .grow{flex:1;font-weight:600}.ginfo .gmem .rm{border:0;background:0;color:#D6334B;font-size:1.1rem;cursor:pointer}.ginfo .gadd{display:flex;gap:8px}.ginfo .gadd .btn{width:auto;padding:0 16px;white-space:nowrap}
 .vg{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%;max-width:680px}.vg:empty{display:none}.vt{position:relative;flex:1 1 44%;min-width:140px;background:#000;border-radius:14px;overflow:hidden}.vt video{width:100%;display:block;max-height:46vh;object-fit:cover}.vt span{position:absolute;bottom:6px;inset-inline-start:8px;color:#fff;font-size:.8rem;text-shadow:0 0 4px #000}.vt.mine video{transform:scaleX(-1)}
 .rwrap{flex:1;min-height:0;background:#000;display:flex;flex-direction:column;position:relative}.rf{flex:1;min-height:0;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none}.rf::-webkit-scrollbar{display:none}.rl{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;background:#000}.rl video{width:100%;height:100%;object-fit:contain;display:block}.rl .ov{position:absolute;inset-inline:0;bottom:0;padding:48px 70px 16px 14px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;pointer-events:none}.rl .who{display:flex;align-items:center;gap:8px;font-weight:700}.rl .cap{margin-top:6px;font-size:.92rem}.rl .acts{position:absolute;inset-inline-end:10px;bottom:90px;display:flex;flex-direction:column;gap:12px;align-items:center}.rl .acts button{border:0;background:rgba(0,0,0,.5);color:#fff;border-radius:24px;padding:8px 12px;font-size:1.05rem;cursor:pointer}.radd{position:absolute;top:10px;inset-inline-start:10px;z-index:5;border:0;border-radius:50%;width:44px;height:44px;background:var(--pri);color:#fff;font-size:1.3rem;cursor:pointer}.rmute{position:absolute;top:16px;inset-inline-end:14px;z-index:5;color:#fff;font-size:1.3rem;pointer-events:none;text-shadow:0 0 4px #000}.rcc{display:flex;gap:16px;justify-content:center;align-items:center;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}.rbig{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:#D6334B;cursor:pointer;padding:0}.rbig.on{border-radius:18px}.rtm{position:absolute;top:calc(12px + env(safe-area-inset-top));inset-inline:0;text-align:center;font-weight:700;color:#fff;text-shadow:0 0 4px #000;pointer-events:none}
+.hero{width:100%;border-radius:22px;padding:20px 16px;color:#fff;background:linear-gradient(135deg,#2F6BFF,#19C3B1);display:flex;flex-direction:column;gap:6px;align-items:center}
+.hero h2{font-size:1.3rem}.hero p{font-size:.88rem;opacity:.92}
+.hero .hbtn{margin-top:6px;border:1.5px solid #fff;background:transparent;color:#fff;border-radius:12px;padding:8px 22px;font-weight:700;cursor:pointer;width:auto}
+.pane{width:100%;display:flex;flex-direction:column;gap:12px;align-items:center;animation:pin .35s ease}
+@keyframes pin{from{opacity:0;transform:translateX(var(--dx,40px))}to{opacity:1;transform:none}}
+.fld{width:100%;display:flex;flex-direction:column;gap:4px;text-align:start}.fld label{font-size:.82rem;color:var(--mut);font-weight:600}
+.two{display:flex;gap:10px;width:100%}.two .fld{flex:1;min-width:0}
+.pwr{position:relative;width:100%}.pwr input{padding-inline-end:44px}.pwr button{position:absolute;inset-inline-end:6px;top:50%;transform:translateY(-50%);width:auto!important;border:0;background:0;cursor:pointer;font-size:1.1rem;padding:6px}
+.err{color:#D6334B;font-size:.85rem;min-height:1.2em}.okk{color:#1a9b6a}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -112,18 +121,39 @@ header .av{width:38px;height:38px;font-size:.95rem}
   <div class="blob b1"></div><div class="blob b2"></div>
   <main class="card">
     <svg class="logo"><use href="#logo"/></svg>
-    <h1>PhilippoPempo</h1>
-    <p class="mut">سجّل دخولك وابدأ المحادثة</p>
+    <div class="hero"><h2 id="hT">أهلاً بك!</h2><p id="hP">ما عندك حساب؟</p><button type="button" class="hbtn" id="swm">إنشاء حساب</button></div>
+    <div class="pane" id="pLogin">
+      <input id="lemail" type="email" placeholder="البريد الإلكتروني" dir="ltr" autocomplete="email">
+      <div class="pwr"><input id="lpass" type="password" placeholder="كلمة السر" dir="ltr" autocomplete="current-password"><button type="button" data-eye="lpass" aria-label="إظهار/إخفاء">👁</button></div>
+      <button class="btn" id="lgo">تسجيل الدخول</button>
+    </div>
+    <div class="pane" id="pReg" hidden>
+      <input id="email" type="email" placeholder="you@gmail.com" dir="ltr" autocomplete="email">
+      <div id="otpBox" hidden style="width:100%;display:flex;flex-direction:column;gap:6px">
+        <input id="otp" class="otp" inputmode="numeric" maxlength="8" placeholder="••••••" dir="ltr" autocomplete="one-time-code">
+        <button class="lnk" id="re">إعادة إرسال الرمز</button>
+      </div>
+      <button class="btn" id="go">إرسال الرمز</button>
+    </div>
+    <div class="or"><i></i>أو عبر<i></i></div>
     <button class="gbtn" id="g"><span><b class="gl">G</b>المتابعة عبر Google</span></button>
     <button class="tbtn" id="t"><svg viewBox="0 0 24 24"><path d="M21.9 3.2 2.6 10.6c-1 .4-1 1.1-.2 1.3l4.9 1.5 1.9 5.8c.2.6.5.8 1 .8s.7-.2 1-.5l2.4-2.3 4.9 3.6c.9.5 1.5.2 1.8-.8L23.9 4.7c.4-1.3-.5-1.9-2-1.5zM8.7 13.2l10-6.3c.5-.3.9-.1.5.2l-8.2 7.4-.3 3.4z"/></svg>المتابعة عبر Telegram</button>
-    <div class="or"><i></i>أو عبر البريد<i></i></div>
-    <input id="email" type="email" placeholder="you@gmail.com" dir="ltr" autocomplete="email">
-    <div id="otpBox" hidden style="width:100%;display:flex;flex-direction:column;gap:6px">
-      <input id="otp" class="otp" inputmode="numeric" maxlength="8" placeholder="••••••" dir="ltr" autocomplete="one-time-code">
-      <button class="lnk" id="re">إعادة إرسال الرمز</button>
-    </div>
-    <button class="btn" id="go">إرسال الرمز</button>
     <a href="privacy.html" target="_blank" rel="noopener" class="mut" style="font-size:.85rem;margin-top:6px">Privacy Policy</a>
+  </main>
+</div>
+
+<div id="setup" class="auth" hidden>
+  <div class="blob b1"></div><div class="blob b2"></div>
+  <main class="card">
+    <svg class="logo"><use href="#logo"/></svg>
+    <div class="hero"><h2>خلّينا نكمّل حسابك</h2><p>خطوة أخيرة: بياناتك وكلمة السر</p></div>
+    <div class="two"><div class="fld"><label for="sfn">الاسم</label><input id="sfn" autocomplete="given-name"></div><div class="fld"><label for="sln">الكنية</label><input id="sln" autocomplete="family-name"></div></div>
+    <div class="fld"><label for="sph">رقم الهاتف</label><input id="sph" type="tel" dir="ltr" placeholder="+963 9XX XXX XXX" autocomplete="tel"></div>
+    <div class="fld"><label for="sp1">كلمة السر</label><div class="pwr"><input id="sp1" type="password" dir="ltr" placeholder="8 أحرف على الأقل" autocomplete="new-password"><button type="button" data-eye="sp1" aria-label="إظهار/إخفاء">👁</button></div></div>
+    <div class="fld"><label for="sp2">تأكيد كلمة السر</label><div class="pwr"><input id="sp2" type="password" dir="ltr" placeholder="أعد كتابتها" autocomplete="new-password"><button type="button" data-eye="sp2" aria-label="إظهار/إخفاء">👁</button></div></div>
+    <p class="err" id="smsg"></p>
+    <button class="btn" id="sgo">حفظ ومتابعة</button>
+    <button class="lnk" id="sout">تسجيل الخروج</button>
   </main>
 </div>
 
@@ -203,10 +233,28 @@ async function api(path, o) {
   if (!r.ok) throw new Error(msgOf(d) || 'حدث خطأ غير متوقع.');
   return d;
 }
-const show = v => { $('#auth').hidden = v !== 'auth'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); clearInterval(PRES); rtStop(); renderAuth(); } };
+const show = v => { $('#auth').hidden = v !== 'auth'; $('#setup').hidden = v !== 'setup'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); clearInterval(PRES); rtStop(); renderAuth(); } };
 
 /* ---------- Auth ---------- */
+function setMode(m) {
+  const L = m === 'login'; $('#pLogin').hidden = !L; $('#pReg').hidden = L;
+  (L ? $('#pLogin') : $('#pReg')).style.setProperty('--dx', L ? '-40px' : '40px');
+  $('#hT').textContent = L ? 'أهلاً بك!' : 'أهلاً بعودتك!'; $('#hP').textContent = L ? 'ما عندك حساب؟' : 'عندك حساب؟'; $('#swm').textContent = L ? 'إنشاء حساب' : 'تسجيل الدخول';
+}
+$('#swm').onclick = () => setMode($('#pLogin').hidden ? 'login' : 'reg');
+document.querySelectorAll('[data-eye]').forEach(b => { b.onclick = () => { const i = $('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; }; });
+$('#lgo').onclick = async () => {
+  const email = $('#lemail').value.trim(), password = $('#lpass').value;
+  if (!/^\S+@\S+\.\S+$/.test(email)) return toast('أدخل بريداً إلكترونياً صحيحاً');
+  if (!password) return toast('أدخل كلمة السر');
+  $('#lgo').disabled = true;
+  try { const d = await api('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email, password }) }); save(d); await boot(); }
+  catch (e) { toast(/invalid|credentials/i.test(e.message) ? 'البريد أو كلمة السر غير صحيحة' : e.message); }
+  $('#lgo').disabled = false;
+};
+$('#lpass').onkeydown = e => { if (e.key === 'Enter') $('#lgo').click(); };
 function renderAuth() {
+  setMode('login');
   $('#otpBox').hidden = true; $('#email').disabled = false; $('#otp').value = '';
   $('#go').textContent = 'إرسال الرمز';
 }
@@ -1269,6 +1317,31 @@ async function enablePush() {
 }
 
 /* ---------- Boot ---------- */
+function enterApp() { show('app'); tab('chats'); ping(); startPresence(); }
+function showSetup() {
+  const md = (ME && ME.user_metadata) || {}, full = String(md.full_name || md.name || PROF.name || '').trim();
+  const fn = md.first_name || full.split(/\s+/)[0] || '', ln = md.last_name || full.split(/\s+/).slice(1).join(' ');
+  $('#sfn').value = fn; $('#sln').value = ln; $('#sph').value = PROF.phone || ''; $('#sp1').value = $('#sp2').value = ''; $('#smsg').textContent = '';
+  show('setup');
+}
+$('#sp2').oninput = () => { const m = $('#smsg'), a = $('#sp1').value, b = $('#sp2').value; if (!b) { m.textContent = ''; return; } const ok = a === b; m.className = 'err' + (ok ? ' okk' : ''); m.textContent = ok ? '✓ كلمتا السر متطابقتان' : 'كلمتا السر غير متطابقتين'; };
+$('#sout').onclick = () => { save(null); ME = null; show('auth'); };
+$('#sgo').onclick = async () => {
+  const m = $('#smsg'); m.className = 'err';
+  const fn = $('#sfn').value.trim(), ln = $('#sln').value.trim(), ph = clean($('#sph').value), p1 = $('#sp1').value, p2 = $('#sp2').value;
+  if (!fn || !ln) return (m.textContent = 'اكتب الاسم والكنية');
+  if (!/^\+?\d{7,15}$/.test(ph)) return (m.textContent = 'رقم الهاتف غير صحيح، اكتبه مع رمز الدولة');
+  if (p1.length < 8) return (m.textContent = 'كلمة السر لازم تكون 8 أحرف على الأقل');
+  if (p1 !== p2) return (m.textContent = 'كلمتا السر غير متطابقتين');
+  $('#sgo').disabled = true; m.textContent = '';
+  try {
+    try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: fn + ' ' + ln, phone: ph }) }); }
+    catch (e) { throw new Error(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
+    ME = await api('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: p1, data: { setup_done: true, first_name: fn, last_name: ln } }) });
+    PROF.name = fn + ' ' + ln; PROF.phone = ph; toast('تم إنشاء حسابك ✓'); enterApp();
+  } catch (e) { m.textContent = /weak|short|least/i.test(e.message) ? 'كلمة السر ضعيفة، جرّب كلمة أطول' : /different|same/i.test(e.message) ? 'اختر كلمة سر جديدة مختلفة' : e.message; }
+  $('#sgo').disabled = false;
+};
 async function boot() {
   if (location.hash.includes('access_token')) {
     const p = new URLSearchParams(location.hash.slice(1));
@@ -1278,7 +1351,8 @@ async function boot() {
   if (!S) return show('auth');
   try { ME = await api('/auth/v1/user'); } catch (e) { save(null); return show('auth'); }
   try { PROF = (await api('/rest/v1/profiles?id=eq.' + ME.id + '&select=name,phone,avatar_path,hide_last_seen'))[0] || {}; } catch (e) { PROF = {}; }
-  show('app'); tab('chats'); ping(); startPresence();
+  if (!(ME.user_metadata && ME.user_metadata.setup_done)) return showSetup();
+  enterApp();
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 { const aq = new URLSearchParams(location.search).get('answer'); if (aq) { AUTOANS = aq; history.replaceState(null, '', location.pathname); } }
