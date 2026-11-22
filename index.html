@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
+<script>try{var L=localStorage.getItem("pp_lang")==="ar"?"ar":"en";document.documentElement.lang=L;document.documentElement.dir=L==="ar"?"rtl":"ltr"}catch(e){}</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PhilippoPempo</title>
 <link rel="manifest" href="manifest.json">
@@ -109,8 +110,19 @@ header .av{width:38px;height:38px;font-size:.95rem}
 @keyframes pin{from{opacity:0;transform:translateX(var(--dx,40px))}to{opacity:1;transform:none}}
 .fld{width:100%;display:flex;flex-direction:column;gap:4px;text-align:start}.fld label{font-size:.82rem;color:var(--mut);font-weight:600}
 .two{display:flex;gap:10px;width:100%}.two .fld{flex:1;min-width:0}
-.pwr{position:relative;width:100%}.pwr input{padding-inline-end:44px}.pwr button{position:absolute;inset-inline-end:6px;top:50%;transform:translateY(-50%);width:auto!important;border:0;background:0;cursor:pointer;font-size:1.1rem;padding:6px}
+.pwr{position:relative;width:100%}.pwr input{padding-right:44px}.pwr button{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:auto!important;border:0;background:0;cursor:pointer;font-size:1.1rem;padding:6px}
 .err{color:#D6334B;font-size:.85rem;min-height:1.2em}.okk{color:#1a9b6a}
+.bn{margin:2px 0 0;font-size:2.1rem;line-height:1.1;font-weight:800;letter-spacing:.5px;direction:ltr}
+.bn span{color:var(--ink)}
+.bn b{background:linear-gradient(135deg,#2F6BFF,#19C3B1);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.wl{margin:0 0 4px;display:flex;align-items:center;gap:12px;width:100%;color:var(--mut);font-size:.95rem;font-weight:600}
+.wl i{flex:1;height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
+.ptitle{margin:4px 0 0;font-size:1.1rem;font-weight:800}
+.mkbtn{width:100%;border:1.5px solid var(--pri);color:var(--pri);background:transparent;border-radius:14px;padding:12px;font-weight:800;font-size:1rem;cursor:pointer;margin-top:4px}
+html[dir=ltr] .msg.me{align-self:flex-end;border-end-start-radius:18px;border-end-end-radius:5px}
+html[dir=ltr] .msg.th{align-self:flex-start;border-end-end-radius:18px;border-end-start-radius:5px}
+html[dir=ltr] .typing{margin-inline-start:0;margin-inline-end:auto}
+html[dir=ltr] .po{background:linear-gradient(to right,rgba(77,123,255,.3) var(--p),transparent var(--p))}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -121,7 +133,9 @@ header .av{width:38px;height:38px;font-size:.95rem}
   <div class="blob b1"></div><div class="blob b2"></div>
   <main class="card">
     <svg class="logo"><use href="#logo"/></svg>
-    <div class="hero"><h2 id="hT">أهلاً بك!</h2><p id="hP">ما عندك حساب؟</p><button type="button" class="hbtn" id="swm">إنشاء حساب</button></div>
+    <h1 class="bn"><span>Philippo</span><b>Pempo</b></h1>
+    <p class="wl"><i></i>أهلاً بك<i></i></p>
+    <h2 class="ptitle" id="pT">تسجيل الدخول</h2>
     <div class="pane" id="pLogin">
       <input id="lemail" type="email" placeholder="البريد الإلكتروني" dir="ltr" autocomplete="email">
       <div class="pwr"><input id="lpass" type="password" placeholder="كلمة السر" dir="ltr" autocomplete="current-password"><button type="button" data-eye="lpass" aria-label="إظهار/إخفاء">👁</button></div>
@@ -139,7 +153,9 @@ header .av{width:38px;height:38px;font-size:.95rem}
     <div class="or"><i></i>أو عبر<i></i></div>
     <button class="gbtn" id="g"><span><b class="gl">G</b>المتابعة عبر Google</span></button>
     <button class="tbtn" id="t"><svg viewBox="0 0 24 24"><path d="M21.9 3.2 2.6 10.6c-1 .4-1 1.1-.2 1.3l4.9 1.5 1.9 5.8c.2.6.5.8 1 .8s.7-.2 1-.5l2.4-2.3 4.9 3.6c.9.5 1.5.2 1.8-.8L23.9 4.7c.4-1.3-.5-1.9-2-1.5zM8.7 13.2l10-6.3c.5-.3.9-.1.5.2l-8.2 7.4-.3 3.4z"/></svg>المتابعة عبر Telegram</button>
+    <button type="button" class="mkbtn" id="swm">إنشاء حساب</button>
     <a href="privacy.html" target="_blank" rel="noopener" class="mut" style="font-size:.85rem;margin-top:6px">Privacy Policy</a>
+    <button type="button" class="lnk" id="lgsw" style="font-size:.85rem"></button>
   </main>
 </div>
 
@@ -186,6 +202,57 @@ header .av{width:38px;height:38px;font-size:.95rem}
 
 <script>
 /* ---------- Config ---------- */
+const LANG = (() => { try { return localStorage.getItem('pp_lang') === 'ar' ? 'ar' : 'en'; } catch (e) { return 'en'; } })();
+const LOC = LANG === 'ar' ? 'ar' : 'en';
+function setLang(l) { try { localStorage.setItem('pp_lang', l); } catch (e) {} location.reload(); }
+const EN = {"البريد الإلكتروني": "Email", "كلمة السر": "Password", "إظهار/إخفاء": "Show/hide", "8 أحرف على الأقل": "At least 8 characters", "أعد كتابتها": "Re-enter it", "مكالمة صوتية": "Voice call", "مكالمة فيديو": "Video call", "بحث": "Search", "معلومات المحادثة": "Chat info", "الملف ليس صورة صالحة": "The file is not a valid image", "محاولات كثيرة، انتظر دقيقة ثم أعد المحاولة.": "Too many attempts. Wait a minute and try again.", "تعذّر إرسال الإيميل، راجع إعدادات SMTP.": "Couldn’t send the email. Check the SMTP settings.", "الرمز غير صحيح أو منتهي، اطلب رمزاً جديداً.": "The code is incorrect or expired. Request a new one.", "تعذّر الاتصال، تأكد من الإنترنت.": "Connection failed. Check your internet.", "حدث خطأ غير متوقع.": "An unexpected error occurred.", "أهلاً بك!": "Welcome!", "أهلاً بك": "Welcome", "أهلاً بعودتك!": "Welcome back!", "ما عندك حساب؟": "Don’t have an account?", "عندك حساب؟": "Already have an account?", "إنشاء حساب": "Create account", "تسجيل الدخول": "Sign in", "أدخل بريداً إلكترونياً صحيحاً": "Enter a valid email address", "أدخل كلمة السر": "Enter your password", "البريد أو كلمة السر غير صحيحة": "Incorrect email or password", "إرسال الرمز": "Send code", "تأكيد الدخول": "Confirm sign-in", "أرسلنا الرمز إلى بريدك": "We sent the code to your email", "أدخل الرمز كما وصلك بالبريد": "Enter the code exactly as it arrived by email", "Google يحتاج أن يكون التطبيق على رابط https (استضافة)، وسنجهّزه معاً.": "Google requires the app to be on an https link (hosting); we’ll set it up together.", "الدخول عبر تيليجرام سيتم تفعيله في المرحلة القادمة ✈️": "Telegram sign-in will be enabled in the next phase ✈️", "تعذّر تسجيل الدخول عبر تيليجرام": "Couldn’t sign in with Telegram", "تعذّر تحميل تيليجرام": "Couldn’t load Telegram", "متصل الآن": "Online", "اليوم": "Today", "أمس": "Yesterday", "المحادثات": "Chats", "الحالة": "Status", "ريلز": "Reels", "محادثة جديدة": "New chat", "حسابي": "My account", "صورة": "Photo", "تعذّر تحميل الصورة": "Couldn’t load the image", "✎ معدّلة": "✎ edited", "تمت القراءة": "Read", "تم التسليم": "Delivered", "📷 صورة": "📷 Photo", "🎤 رسالة صوتية": "🎤 Voice message", "رد": "Reply", "تحويل": "Forward", "تعديل": "Edit", "حذف": "Delete", "⭐ الرسائل المحفوظة": "⭐ Saved messages", "مجموعة": "Group", "مستخدم": "User", "ملاحظاتي": "My notes", "تعذّر تحويل الملف": "Couldn’t convert the file", "✖ إغلاق": "✖ Close", "تحويل إلى…": "Forward to…", "تم التحويل ✓": "Forwarded ✓", "✅ إلغاء الحظر": "✅ Unblock", "🚫 حظر المستخدم": "🚫 Block user", "تم الحظر": "Blocked", "تم إلغاء الحظر": "Unblocked", "جارٍ الحذف…": "Deleting…", "تم حذف حسابك": "Your account was deleted", "المزيد": "More", "📊 استطلاع جديد": "📊 New poll", "⏰ جدولة رسالة": "⏰ Schedule a message", "استطلاع جديد": "New poll", "+ خيار": "+ Option", "نشر الاستطلاع": "Publish poll", "السؤال": "Question", "اكتب السؤال": "Write the question", "لازم خيارين على الأقل": "At least two options are required", "جدولة رسالة": "Schedule a message", "جدولة": "Schedule", "نص الرسالة": "Message text", "مجدولة بانتظار الإرسال:": "Scheduled, waiting to be sent:", "اكتب الرسالة": "Write the message", "اختر وقت بالمستقبل": "Pick a time in the future", "تمت الجدولة ✓": "Scheduled ✓", "📌 إلغاء التثبيت": "📌 Unpin", "📌 تثبيت": "📌 Pin", "🔔 إلغاء الكتم": "🔔 Unmute", "🔕 كتم": "🔕 Mute", "📦 إلغاء الأرشفة": "📦 Unarchive", "📦 أرشفة": "📦 Archive", "إلغاء": "Cancel", "جارٍ التحميل…": "Loading…", "لا توجد محادثات بعد": "No chats yet", "ابدأ أول محادثة من تبويب «جديد».": "Start your first chat from the “New” tab.", "ابحث في المحادثات…": "Search chats…", "⬅️ كل المحادثات": "⬅️ All chats", "اضغط مطوّلاً على محادثة للتثبيت أو الكتم أو الأرشفة": "Long-press a chat to pin, mute or archive it", "تعذّر تحميل المحادثات": "Couldn’t load chats", "مساحتك الخاصة": "Your private space", "إرسال": "Send", "اكتب رسالة…": "Type a message…", "✏️ تعديل الرسالة": "✏️ Edit message", "حفظ": "Save", "تحذف هالرسالة للجميع؟": "Delete this message for everyone?", "ما فيك تحذف هالرسالة": "You can’t delete this message", "ابحث بالمحادثة": "Search in chat", "رسالة محذوفة": "Message deleted", "ما فيك تعدّل هالرسالة": "You can’t edit this message", "جارٍ إرسال الصورة…": "Sending the photo…", "تعذّر رفع الصورة": "Couldn’t upload the photo", "تعذّر إرسال الصورة": "Couldn’t send the photo", "التسجيل كبير جداً": "The recording is too large", "جارٍ إرسال التسجيل…": "Sending the recording…", "تعذّر رفع التسجيل": "Couldn’t upload the recording", "تعذّر إرسال التسجيل": "Couldn’t send the recording", "تعذّر الوصول للمايكروفون، اسمح له من إعدادات المتصفح": "Couldn’t access the microphone. Allow it in your browser settings.", "إضافة": "Add", "مغادرة المجموعة": "Leave group", "رقم هاتف العضو الجديد": "New member’s phone number", "📷 تغيير صورة المجموعة": "📷 Change group photo", "تم تحديث الصورة ✓": "Photo updated ✓", "الأعضاء": "Members", "إزالة": "Remove", "لا يوجد مستخدم بهذا الرقم": "No user with this number", "موجود بالمجموعة أصلاً": "Already in the group", "انضاف ✔": "Added ✔", "بدك تغادر المجموعة؟": "Leave the group?", "ابدأ المحادثة": "Start chat", "رقم هاتف الشخص": "Person’s phone number", "أو أنشئ مجموعة:": "Or create a group:", "إضافة عضو": "Add member", "إنشاء المجموعة": "Create group", "اسم المجموعة": "Group name", "رقم هاتف عضو": "Member’s phone number", "أنت موجود بالمجموعة أصلاً 🙂": "You’re already in the group 🙂", "تمت إضافته من قبل": "Already added", "اكتب اسم المجموعة": "Enter the group name", "أضف عضوين على الأقل": "Add at least two members", "أنا": "Me", "ابحث عن صديق برقم هاتفه المسجّل في حسابه.": "Find a friend by the phone number registered on their account.", "هذا رقمك أنت 🙂": "That’s your own number 🙂", "حفظ التغييرات": "Save changes", "تسجيل الخروج": "Sign out", "الاسم": "Name", "رقم الهاتف (ليجدك أصدقاؤك)": "Phone number (so friends can find you)", "تغيير الصورة": "Change photo", "إخفاء آخر ظهور (وإخفاء آخر ظهور الآخرين عنك)": "Hide last seen (and hide others’ last seen from you)", "تم إخفاء آخر ظهور": "Last seen hidden", "تم إظهار آخر ظهور": "Last seen visible", "🔔 تفعيل الإشعارات": "🔔 Enable notifications", "تم تفعيل الإشعارات ✓": "Notifications enabled ✓", "🗑 حذف الحساب": "🗑 Delete account", "هاد بيحذف حسابك ورسائلك وملفاتك نهائياً ولا يمكن التراجع.\nاكتب «حذف» للتأكيد": "This will permanently delete your account, messages and files. This can’t be undone.\nType “DELETE” to confirm", "تلقائي": "Auto", "فاتح": "Light", "داكن": "Dark", "خلفية": "Wallpaper", "المظهر": "Appearance", "خلفية المحادثة": "Chat wallpaper", "🔑 تغيير كلمة السر": "🔑 Change password", "تم الحفظ ✓": "Saved ✓", "هذا الرقم مستخدم في حساب آخر": "This number is used by another account", "ما في ريلز بعد": "No Reels yet", "كن أول من ينشر ريل 🎬": "Be the first to post a Reel 🎬", "تحذف هالريل؟": "Delete this Reel?", "تبلّغ عن هالريل؟": "Report this Reel?", "وصل البلاغ، شكراً": "Report received, thank you", "تعذّر تحميل الريلز": "Couldn’t load Reels", "اكتب تعليق…": "Write a comment…", "التعليقات": "Comments", "ما في تعليقات بعد": "No comments yet", "تعذّر فتح الكاميرا": "Couldn’t open the camera", "الفيديو كبير (الحد 15MB)": "The video is too large (15MB limit)", "نشر": "Post", "إعادة": "Retake", "تعليق (اختياري)": "Caption (optional)", "جارٍ النشر…": "Posting…", "تعذّر رفع الفيديو": "Couldn’t upload the video", "تم نشر الريل ✓": "Reel posted ✓", "تعذّر النشر": "Couldn’t post", "المتصفح ما بيدعم التسجيل": "Your browser doesn’t support recording", "الفيديو كبير، الحد 15MB. سجّل من هون أو قصّه": "The video is too large (15MB limit). Record it here or trim it.", "الحد الأقصى 30 ثانية": "Maximum 30 seconds", "ما قدرت أقرأ الفيديو": "Couldn’t read the video", "الآن": "Just now", "اكتب حالتك…": "Write your status…", "اكتب شي أول": "Write something first", "حالتي": "My status", "تحذف هالحالة؟": "Delete this status?", "لا يوجد": "None", "اضغط 📷 أو ✏️ لإضافة حالة": "Tap 📷 or ✏️ to add a status", "✏️ نص": "✏️ Text", "تم نشر الحالة ✓": "Status posted ✓", "حالات الأصدقاء (24 ساعة)": "Friends’ statuses (24 hours)", "ما في حالات جديدة": "No new statuses", "لما حدا من أصدقائك ينشر حالة بتظهر هون.": "When a friend posts a status, it will show up here.", "تعذّر تحميل الحالات": "Couldn’t load statuses", "تعذّر تحميل مكتبة المكالمات": "Couldn’t load the calling library", "أنت بمكالمة حالياً": "You’re already on a call", "جاري الاتصال…": "Connecting…", "تفعيل الصوت": "Enable sound", "📵 مكالمة فائتة": "📵 Missed call", "انتهت المكالمة": "Call ended", "تعذّر تشغيل الكاميرا": "Couldn’t start the camera", "جاري الرنين…": "Ringing…", "تم رفض المكالمة": "Call declined", "ما في رد": "No answer", "مكالمة فيديو واردة…": "Incoming video call…", "مكالمة صوتية واردة…": "Incoming voice call…", "📞 مكالمة واردة": "📞 Incoming call", "الجهاز ما بيدعم الإشعارات. على الآيفون ثبّت التطبيق أولاً.": "This device doesn’t support notifications. On iPhone, install the app first.", "ما انعطت صلاحية الإشعارات": "Notification permission wasn’t granted", "كلمة السر لازم تكون 8 أحرف على الأقل": "Password must be at least 8 characters", "كلمتا السر غير متطابقتين": "Passwords don’t match", "كلمة السر ضعيفة، جرّب كلمة أطول": "Weak password. Try a longer one.", "اختر كلمة سر مختلفة عن القديمة": "Choose a password different from the old one", "✓ كلمتا السر متطابقتان": "✓ Passwords match", "خطأ": "Error", "استعادة كلمة السر": "Reset password", "اكتب بريدك ونرسل لك رسالة فيها رابط (أو رمز) لتعيين كلمة سر جديدة.": "Enter your email and we’ll send you a message with a link (or code) to set a new password.", "أرسل الرسالة": "Send message", "تأكيد الرمز": "Confirm code", "✈️ حسابي عبر Telegram: ادخل مباشرة": "✈️ My account is on Telegram: sign in directly", "الرمز من الرسالة (إن وصلك)": "Code from the message (if you got one)", "✈️ أرسل لي رمزاً على بوت Telegram": "✈️ Send me a code on the Telegram bot", "اكتب رقم هاتف حسابك (بنفس الصيغة اللي سجّلتها) ونرسل رمزاً إلى بوت Telegram.": "Enter your account’s phone number (in the same format you registered it) and we’ll send a code to the Telegram bot.", "أرسل الرمز": "Send code", "الرمز من البوت": "Code from the bot", "رقم الهاتف غير صحيح": "Invalid phone number", "إذا كان الرقم مرتبطاً بحساب Telegram وصلك رمز من البوت. افتح البوت واكتب الرمز هون.": "If the number is linked to a Telegram account, you’ll get a code from the bot. Open the bot and enter the code here.", "إعادة الإرسال": "Resend", "الرمز 6 أرقام": "The code is 6 digits", "الرمز غير صحيح أو منتهي": "The code is incorrect or expired", "إذا كان هالبريد مسجّلاً عندنا فقد أرسلنا له رسالة. افتح الرابط منها، أو اكتب الرمز هون.": "If this email is registered with us, we’ve sent it a message. Open the link in it, or enter the code here.", "أدخل الرمز كما وصلك": "Enter the code as you received it", "تم تغيير كلمة السر ✓": "Password changed ✓", "تغيير كلمة السر": "Change password", "تحقق": "Verify", "نسيت كلمة السر الحالية؟": "Forgot your current password?", "حفظ كلمة السر": "Save password", "كلمة السر الحالية": "Current password", "كلمة السر الجديدة (8 أحرف على الأقل)": "New password (at least 8 characters)", "أعد كتابة كلمة السر الجديدة": "Re-enter the new password", "اكتب كلمة السر الحالية": "Enter your current password", "كلمة السر الحالية غير صحيحة": "Current password is incorrect", "اكتب الاسم والكنية": "Enter your first and last name", "رقم الهاتف غير صحيح، اكتبه مع رمز الدولة": "Invalid phone number. Include the country code.", "تم إنشاء حسابك ✓": "Your account was created ✓", "اختر كلمة سر جديدة مختلفة": "Choose a different new password", "الرابط منتهي أو غير صالح، اطلب رابطاً جديداً": "The link is expired or invalid. Request a new one.", "نسيت كلمة السر؟": "Forgot password?", "إعادة إرسال الرمز": "Resend code", "أو عبر": "or continue with", "المتابعة عبر Google": "Continue with Google", "المتابعة عبر Telegram": "Continue with Telegram", "خلّينا نكمّل حسابك": "Let’s finish your account", "خطوة أخيرة: بياناتك وكلمة السر": "One last step: your details and password", "الكنية": "Last name", "رقم الهاتف": "Phone number", "تأكيد كلمة السر": "Confirm password", "حفظ ومتابعة": "Save & continue", "كلمة سر جديدة": "New password", "اختر كلمة سر جديدة لحسابك": "Choose a new password for your account", "كلمة السر الجديدة": "New password", "جديد": "New"};
+const PAT = [
+  [/^آخر ظهور (.*)$/, (m, r) => 'Last seen ' + r.replace(/^اليوم/, 'Today').replace(/^أمس/, 'Yesterday')],
+  [/^تحظر (.+)؟ ما رح تقدروا تتراسلوا أو تتصلوا ببعض\.$/, (m, n) => 'Block ' + n + '? You won’t be able to message or call each other.'],
+  [/^📦 المؤرشفة \((\d+)\)$/, (m, n) => '📦 Archived (' + n + ')'],
+  [/^مجموعة · (\d+) أعضاء$/, (m, n) => 'Group · ' + n + ' members'],
+  [/^🔴 يسجّل (\S+) — اضغط ⬆️ للإرسال$/, (m, t) => '🔴 Recording ' + t + ' — tap ⬆️ to send'],
+  [/^(.*) \(أنت\)(.*)$/, (m, a, b) => a + ' (you)' + b],
+  [/^تشيل (.+) من المجموعة؟$/, (m, n) => 'Remove ' + n + ' from the group?'],
+  [/^قبل (\d+) د$/, (m, n) => n + ' min ago'],
+  [/^قبل (\d+) س$/, (m, n) => n + ' h ago'],
+  [/^متصل · (.+)$/, (m, t) => 'Connected · ' + t],
+  [/^تعذّر بدء المكالمة \((\d+)\)$/, (m, n) => 'Couldn’t start the call (' + n + ')'],
+  [/^(.+) يتصل بالمجموعة \(فيديو\)…$/, (m, n) => n + ' is calling the group (video)…'],
+  [/^(.+) يتصل بالمجموعة…$/, (m, n) => n + ' is calling the group…'],
+  [/^(\d+) صوت$/, (m, n) => n + ' votes'],
+  [/^خيار (\d+)$/, (m, n) => 'Option ' + n],
+];
+const hasAr = s => /[\u0600-\u06FF]/.test(s);
+function trs(s) {
+  if (LANG !== 'en' || typeof s !== 'string' || !hasAr(s)) return s;
+  const core = s.trim(); if (!core) return s;
+  let r = EN[core];
+  if (r === undefined) { for (const [re, f] of PAT) if (re.test(core)) { r = core.replace(re, f); break; } }
+  return r === undefined ? s : s.slice(0, s.indexOf(core)) + r + s.slice(s.indexOf(core) + core.length);
+}
+if (LANG === 'en') {
+  const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  const xText = n => { const p = n.parentNode; if (!p || /^(SCRIPT|STYLE)$/.test(p.nodeName)) return; const t = trs(n.data); if (t !== n.data) n.data = t; };
+  const xAttr = (e, a) => { const v = e.getAttribute(a); if (v) { const t = trs(v); if (t !== v) e.setAttribute(a, t); } };
+  const walk = root => {
+    if (root.nodeType === 3) return xText(root);
+    if (root.nodeType !== 1) return;
+    ATTRS.forEach(a => xAttr(root, a));
+    root.querySelectorAll('[placeholder],[title],[aria-label],[alt]').forEach(e => ATTRS.forEach(a => xAttr(e, a)));
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) xText(n);
+  };
+  new MutationObserver(recs => {
+    for (const r of recs) {
+      if (r.type === 'childList') r.addedNodes.forEach(walk);
+      else if (r.type === 'characterData') xText(r.target);
+      else if (r.type === 'attributes') xAttr(r.target, r.attributeName);
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+  walk(document.body);
+  ['alert', 'confirm', 'prompt'].forEach(k => { const f = window[k].bind(window); window[k] = (m, ...a) => f(trs(m), ...a); });
+}
+{ const lb = document.getElementById('lgsw'); lb.textContent = LANG === 'en' ? 'العربية' : 'English'; lb.onclick = () => setLang(LANG === 'en' ? 'ar' : 'en'); }
 const CFG = {
   url: 'https://qqbshxboqscutyvkspdd.supabase.co',
   key: 'sb_publishable_L5PrHv3GGdBt51dbw0kKeg_IPs1IYIA',
@@ -253,7 +320,7 @@ const show = v => { $('#auth').hidden = v !== 'auth'; $('#setup').hidden = v !==
 function setMode(m) {
   const L = m === 'login'; $('#pLogin').hidden = !L; $('#pReg').hidden = L;
   (L ? $('#pLogin') : $('#pReg')).style.setProperty('--dx', L ? '-40px' : '40px');
-  $('#hT').textContent = L ? 'أهلاً بك!' : 'أهلاً بعودتك!'; $('#hP').textContent = L ? 'ما عندك حساب؟' : 'عندك حساب؟'; $('#swm').textContent = L ? 'إنشاء حساب' : 'تسجيل الدخول';
+  $('#pT').textContent = L ? 'تسجيل الدخول' : 'إنشاء حساب'; $('#swm').textContent = L ? 'إنشاء حساب' : 'تسجيل الدخول';
 }
 $('#swm').onclick = () => setMode($('#pLogin').hidden ? 'login' : 'reg');
 document.querySelectorAll('[data-eye]').forEach(b => { b.onclick = () => { const i = $('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; }; });
@@ -362,8 +429,8 @@ function seenText(ts) {
   if (!ts) return '';
   const d = new Date(ts), now = new Date();
   if ((now - d) / 1000 < 120) return 'متصل الآن';
-  const t = d.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
-  const day = d.toDateString() === now.toDateString() ? 'اليوم' : d.toDateString() === new Date(now - 864e5).toDateString() ? 'أمس' : d.toLocaleDateString('ar');
+  const t = d.toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit' });
+  const day = d.toDateString() === now.toDateString() ? 'اليوم' : d.toDateString() === new Date(now - 864e5).toDateString() ? 'أمس' : d.toLocaleDateString(LOC);
   return 'آخر ظهور ' + day + ' ' + t;
 }
 let PRES = null, STOPREC = null;
@@ -418,7 +485,7 @@ function msgEl(x, readAt) {
     d.append(a);
   } else if (x.kind === 'poll') { d.append(el('div', 'pl'));
   } else { d.append(el('span', 'mt', x.body || '')); if (x.edited_at) d.append(el('span', 'ed', '✎ معدّلة')); }
-  const meta = el('div', 'meta'); meta.append(el('span', '', new Date(x.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
+  const meta = el('div', 'meta'); meta.append(el('span', '', new Date(x.created_at).toLocaleTimeString(LOC, { hour: 'numeric', minute: '2-digit' })));
   if (mine) { meta.append(el('span', '', '·'), el('span', 'tick', readAt && readAt >= x.created_at ? 'تمت القراءة' : 'تم التسليم')); }
   d.append(meta);
   return d;
@@ -573,7 +640,7 @@ async function scheduleForm(chatId, inp) {
     try {
       const r = await api('/rest/v1/scheduled_messages?chat_id=eq.' + chatId + '&select=id,body,send_at&order=send_at.asc');
       list.replaceChildren(...(r.length ? [el('div', 'mut', 'مجدولة بانتظار الإرسال:')] : []), ...r.map(m => {
-        const row = el('div', 'mini'), tx = el('span', '', new Date(m.send_at).toLocaleString('ar') + ' — ' + m.body.slice(0, 40)), del = el('button', 'lnk', '🗑'); tx.style.flex = '1';
+        const row = el('div', 'mini'), tx = el('span', '', new Date(m.send_at).toLocaleString(LOC) + ' — ' + m.body.slice(0, 40)), del = el('button', 'lnk', '🗑'); tx.style.flex = '1';
         del.onclick = async () => { try { await api('/rest/v1/scheduled_messages?id=eq.' + m.id, { method: 'DELETE' }); loadL(); } catch (e) { toast(e.message); } };
         row.append(tx, del); return row;
       }));
@@ -943,7 +1010,7 @@ async function viewMe() {
   const pb = el('button', 'btn', '🔔 تفعيل الإشعارات');
   pb.onclick = async () => { try { await enablePush(); toast('تم تفعيل الإشعارات ✓'); } catch (e) { toast(e.message); } };
   const dacc = el('button', 'btn ghost', '🗑 حذف الحساب'); dacc.style.color = '#D6334B';
-  dacc.onclick = () => { const t = prompt('هاد بيحذف حسابك ورسائلك وملفاتك نهائياً ولا يمكن التراجع.\nاكتب «حذف» للتأكيد'); if (t && t.trim() === 'حذف') deleteAccount(); };
+  dacc.onclick = () => { const t = prompt('هاد بيحذف حسابك ورسائلك وملفاتك نهائياً ولا يمكن التراجع.\nاكتب «حذف» للتأكيد'); if (t && /^(حذف|delete)$/i.test(t.trim())) deleteAccount(); };
   const look = el('div'), seg = el('div', 'seg'), swr = el('div', 'swr'); look.style.cssText = 'display:flex;flex-direction:column;gap:8px';
   [['auto', 'تلقائي'], ['light', 'فاتح'], ['dark', 'داكن']].forEach(([k, t]) => {
     const b = el('button', PREF.get('pp_theme', 'auto') === k ? 'on' : '', t);
@@ -955,7 +1022,9 @@ async function viewMe() {
     b.onclick = () => { PREF.set('pp_wall', k); applyLook(); swr.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
     swr.append(b);
   });
-  look.append(el('div', 'mut', 'المظهر'), seg, el('div', 'mut', 'خلفية المحادثة'), swr);
+  const lgs = el('div', 'seg');
+  [['en', 'English'], ['ar', 'العربية']].forEach(([k, t]) => { const b = el('button', LANG === k ? 'on' : '', t); b.onclick = () => { if (k !== LANG) setLang(k); }; lgs.append(b); });
+  look.append(el('div', 'mut', 'المظهر'), seg, el('div', 'mut', 'خلفية المحادثة'), swr, el('div', 'mut', 'Language · اللغة'), lgs);
   const pwb = el('button', 'btn ghost', '🔑 تغيير كلمة السر'); pwb.style.color = 'var(--pri)'; pwb.onclick = changePwSheet;
   v.replaceChildren(card, n, ph, opt, look, ...(isTG(ME) ? [] : [pwb]), pb, sv, out, dacc);
   sv.onclick = async () => {
