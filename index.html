@@ -150,8 +150,8 @@ header .av{width:38px;height:38px;font-size:.95rem}
     <div class="hero"><h2>خلّينا نكمّل حسابك</h2><p>خطوة أخيرة: بياناتك وكلمة السر</p></div>
     <div class="two"><div class="fld"><label for="sfn">الاسم</label><input id="sfn" autocomplete="given-name"></div><div class="fld"><label for="sln">الكنية</label><input id="sln" autocomplete="family-name"></div></div>
     <div class="fld"><label for="sph">رقم الهاتف</label><input id="sph" type="tel" dir="ltr" placeholder="+963 9XX XXX XXX" autocomplete="tel"></div>
-    <div class="fld"><label for="sp1">كلمة السر</label><div class="pwr"><input id="sp1" type="password" dir="ltr" placeholder="8 أحرف على الأقل" autocomplete="new-password"><button type="button" data-eye="sp1" aria-label="إظهار/إخفاء">👁</button></div></div>
-    <div class="fld"><label for="sp2">تأكيد كلمة السر</label><div class="pwr"><input id="sp2" type="password" dir="ltr" placeholder="أعد كتابتها" autocomplete="new-password"><button type="button" data-eye="sp2" aria-label="إظهار/إخفاء">👁</button></div></div>
+    <div class="fld pwf"><label for="sp1">كلمة السر</label><div class="pwr"><input id="sp1" type="password" dir="ltr" placeholder="8 أحرف على الأقل" autocomplete="new-password"><button type="button" data-eye="sp1" aria-label="إظهار/إخفاء">👁</button></div></div>
+    <div class="fld pwf"><label for="sp2">تأكيد كلمة السر</label><div class="pwr"><input id="sp2" type="password" dir="ltr" placeholder="أعد كتابتها" autocomplete="new-password"><button type="button" data-eye="sp2" aria-label="إظهار/إخفاء">👁</button></div></div>
     <p class="err" id="smsg"></p>
     <button class="btn" id="sgo">حفظ ومتابعة</button>
     <button class="lnk" id="sout">تسجيل الخروج</button>
@@ -957,7 +957,7 @@ async function viewMe() {
   });
   look.append(el('div', 'mut', 'المظهر'), seg, el('div', 'mut', 'خلفية المحادثة'), swr);
   const pwb = el('button', 'btn ghost', '🔑 تغيير كلمة السر'); pwb.style.color = 'var(--pri)'; pwb.onclick = changePwSheet;
-  v.replaceChildren(card, n, ph, opt, look, pwb, pb, sv, out, dacc);
+  v.replaceChildren(card, n, ph, opt, look, ...(isTG(ME) ? [] : [pwb]), pb, sv, out, dacc);
   sv.onclick = async () => {
     try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: n.value.trim(), phone: clean(ph.value) || null }) }); toast('تم الحفظ ✓'); }
     catch (e) { toast(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
@@ -1336,6 +1336,8 @@ let REC = false;
 const pwOk = (a, b) => (a.length < 8 ? 'كلمة السر لازم تكون 8 أحرف على الأقل' : a !== b ? 'كلمتا السر غير متطابقتين' : '');
 const pwErr = e => (/weak|short|least/i.test(e.message) ? 'كلمة السر ضعيفة، جرّب كلمة أطول' : /different|same/i.test(e.message) ? 'اختر كلمة سر مختلفة عن القديمة' : e.message);
 const liveMatch = (a, b, m) => () => { if (!b.value) { m.textContent = ''; return; } const ok = a.value === b.value; m.className = 'err' + (ok ? ' okk' : ''); m.textContent = ok ? '✓ كلمتا السر متطابقتان' : 'كلمتا السر غير متطابقتين'; };
+const tgCall = body => fetch(CFG.tgFn.replace('telegram-auth', 'telegram-reset'), { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: CFG.key }, body: JSON.stringify(body) })
+  .then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'خطأ'); return d; });
 function forgotSheet(pre) {
   const { bg, sh } = sheetOf('استعادة كلمة السر');
   const msg = el('p', 'mut', 'اكتب بريدك ونرسل لك رسالة فيها رابط (أو رمز) لتعيين كلمة سر جديدة.'), em = el('input'), go = el('button', 'btn', 'أرسل الرسالة'),
@@ -1343,7 +1345,30 @@ function forgotSheet(pre) {
   em.type = 'email'; em.dir = 'ltr'; em.placeholder = 'البريد الإلكتروني'; em.value = pre || ''; em.autocomplete = 'email';
   code.inputMode = 'numeric'; code.dir = 'ltr'; code.placeholder = 'الرمز من الرسالة (إن وصلك)'; code.hidden = vb.hidden = true;
   tg.onclick = () => { bg.remove(); $('#t').click(); };
-  sh.append(msg, em, go, code, vb, tg);
+  const tr = el('button', 'lnk', '✈️ أرسل لي رمزاً على بوت Telegram');
+  tr.onclick = () => {
+    tr.remove();
+    const tm = el('p', 'mut', 'اكتب رقم هاتف حسابك (بنفس الصيغة اللي سجّلتها) ونرسل رمزاً إلى بوت Telegram.'), ph = el('input'), sb = el('button', 'btn', 'أرسل الرمز'),
+          tc = el('input'), tv = el('button', 'btn', 'تأكيد الرمز');
+    ph.type = 'tel'; ph.dir = 'ltr'; ph.placeholder = '+963 9XX XXX XXX'; ph.autocomplete = 'tel';
+    tc.inputMode = 'numeric'; tc.dir = 'ltr'; tc.maxLength = 6; tc.placeholder = 'الرمز من البوت'; tc.hidden = tv.hidden = true;
+    sh.append(tm, ph, sb, tc, tv);
+    sb.onclick = async () => {
+      if (!/^\+?\d{7,15}$/.test(clean(ph.value))) return toast('رقم الهاتف غير صحيح');
+      sb.disabled = true;
+      try { await tgCall({ action: 'send', phone: clean(ph.value) }); tm.textContent = 'إذا كان الرقم مرتبطاً بحساب Telegram وصلك رمز من البوت. افتح البوت واكتب الرمز هون.'; tc.hidden = tv.hidden = false; sb.textContent = 'إعادة الإرسال'; }
+      catch (e) { toast(e.message); }
+      sb.disabled = false;
+    };
+    tv.onclick = async () => {
+      if (!/^\d{6}$/.test(tc.value.trim())) return toast('الرمز 6 أرقام');
+      tv.disabled = true;
+      try { const d = await tgCall({ action: 'verify', phone: clean(ph.value), code: tc.value.trim() }); REC = true; save(d); bg.remove(); await boot(); }
+      catch (e) { toast('الرمز غير صحيح أو منتهي'); }
+      tv.disabled = false;
+    };
+  };
+  sh.append(msg, em, go, code, vb, tr, tg);
   const mail = () => em.value.trim();
   go.onclick = async () => {
     if (!/^\S+@\S+\.\S+$/.test(mail())) return toast('أدخل بريداً إلكترونياً صحيحاً');
@@ -1400,7 +1425,9 @@ function changePwSheet() {
   };
 }
 function enterApp() { show('app'); tab('chats'); ping(); startPresence(); }
+const isTG = u => !!u && (/@telegram\.invalid$/.test(u.email || '') || !!(u.user_metadata && u.user_metadata.provider_name === 'telegram'));
 function showSetup() {
+  document.querySelectorAll('#setup .pwf').forEach(f => { f.hidden = isTG(ME); });
   const md = (ME && ME.user_metadata) || {}, full = String(md.full_name || md.name || PROF.name || '').trim();
   const fn = md.first_name || full.split(/\s+/)[0] || '', ln = md.last_name || full.split(/\s+/).slice(1).join(' ');
   $('#sfn').value = fn; $('#sln').value = ln; $('#sph').value = PROF.phone || ''; $('#sp1').value = $('#sp2').value = ''; $('#smsg').textContent = '';
@@ -1413,13 +1440,13 @@ $('#sgo').onclick = async () => {
   const fn = $('#sfn').value.trim(), ln = $('#sln').value.trim(), ph = clean($('#sph').value), p1 = $('#sp1').value, p2 = $('#sp2').value;
   if (!fn || !ln) return (m.textContent = 'اكتب الاسم والكنية');
   if (!/^\+?\d{7,15}$/.test(ph)) return (m.textContent = 'رقم الهاتف غير صحيح، اكتبه مع رمز الدولة');
-  if (p1.length < 8) return (m.textContent = 'كلمة السر لازم تكون 8 أحرف على الأقل');
-  if (p1 !== p2) return (m.textContent = 'كلمتا السر غير متطابقتين');
+  if (!isTG(ME) && p1.length < 8) return (m.textContent = 'كلمة السر لازم تكون 8 أحرف على الأقل');
+  if (!isTG(ME) && p1 !== p2) return (m.textContent = 'كلمتا السر غير متطابقتين');
   $('#sgo').disabled = true; m.textContent = '';
   try {
     try { await api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ name: fn + ' ' + ln, phone: ph }) }); }
     catch (e) { throw new Error(/unique|duplicate/i.test(e.message) ? 'هذا الرقم مستخدم في حساب آخر' : e.message); }
-    ME = await api('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ password: p1, data: { setup_done: true, first_name: fn, last_name: ln } }) });
+    ME = await api('/auth/v1/user', { method: 'PUT', body: JSON.stringify({ ...(isTG(ME) ? {} : { password: p1 }), data: { setup_done: true, first_name: fn, last_name: ln } }) });
     PROF.name = fn + ' ' + ln; PROF.phone = ph; toast('تم إنشاء حسابك ✓'); enterApp();
   } catch (e) { m.textContent = /weak|short|least/i.test(e.message) ? 'كلمة السر ضعيفة، جرّب كلمة أطول' : /different|same/i.test(e.message) ? 'اختر كلمة سر جديدة مختلفة' : e.message; }
   $('#sgo').disabled = false;
