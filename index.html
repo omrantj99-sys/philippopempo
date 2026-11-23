@@ -377,7 +377,7 @@ async function api(path, o) {
   if (!r.ok) throw new Error(msgOf(d) || 'حدث خطأ غير متوقع.');
   return d;
 }
-const show = v => { $('#auth').hidden = v !== 'auth'; $('#setup').hidden = v !== 'setup'; $('#reset').hidden = v !== 'reset'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); clearInterval(PRES); rtStop(); renderAuth(); } };
+const show = v => { $('#auth').hidden = v !== 'auth'; $('#setup').hidden = v !== 'setup'; $('#reset').hidden = v !== 'reset'; $('#app').hidden = v !== 'app'; if (v === 'auth') { clearInterval(POLL); clearInterval(PRES); rtStop(); inboxStop(); renderAuth(); } };
 
 /* ---------- Auth ---------- */
 function setMode(m) {
@@ -499,10 +499,10 @@ function seenText(ts) {
 let PRES = null, STOPREC = null;
 function ping() { if (ME && S) api('/rest/v1/profiles?id=eq.' + ME.id, { method: 'PATCH', body: JSON.stringify({ last_seen: PROF.hide_last_seen ? null : new Date().toISOString() }) }).catch(() => {}); }
 function startPresence() { clearInterval(PRES); PRES = setInterval(() => { if (!document.hidden) ping(); }, 45000); }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { ping(); pollCalls(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { ping(); pollCalls(); inboxResume(); } });
 
 /* ---------- App views ---------- */
-function setNavBadge(n) { document.title = (n ? '(' + (n > 99 ? '99+' : n) + ') ' : '') + 'PhilippoPempo'; const b = $('#nbchats'); if (!b) return; b.hidden = !n; b.textContent = n > 99 ? '99+' : n; }
+function setNavBadge(n) { try { if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch (e) {} document.title = (n ? '(' + (n > 99 ? '99+' : n) + ') ' : '') + 'PhilippoPempo'; const b = $('#nbchats'); if (!b) return; b.hidden = !n; b.textContent = n > 99 ? '99+' : n; }
 function tab(n) {
   { const h = $('#hav'); if (h) h.remove(); const lg = document.querySelector('header .logo'); if (lg) lg.style.display = ''; }
   $('#view').style.cssText = '';
@@ -731,8 +731,8 @@ function chatMenu(title, pf, set) {
   sh.append(el('b', '', title)); add(pf.pinned ? '📌 إلغاء التثبيت' : '📌 تثبيت', 'pinned'); add(pf.muted ? '🔔 إلغاء الكتم' : '🔕 كتم', 'muted'); add(pf.archived ? '📦 إلغاء الأرشفة' : '📦 أرشفة', 'archived');
   const c = el('button', 'btn ghost', 'إلغاء'); c.onclick = () => bg.remove(); sh.append(c); bg.onclick = e => { if (e.target === bg) bg.remove(); }; bg.append(sh); document.body.append(bg);
 }
-async function viewChats() {
-  const v = DESK.matches ? $('#slist') : $('#view'); if (!DESK.matches || !v.childElementCount) v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
+async function viewChats(quiet) {
+  const v = DESK.matches ? $('#slist') : $('#view'); if (!quiet && (!DESK.matches || !v.childElementCount)) v.replaceChildren(el('p', 'empty', 'جارٍ التحميل…'));
   try {
     const rows = await api('/rest/v1/chat_members?select=chat_id,user_id,last_read_at,profiles(name,phone,avatar_path)');
     const by = {}, mine = {};
@@ -748,7 +748,7 @@ async function viewChats() {
     } catch (e) {}
     let P = {};
     try { (await api('/rest/v1/chat_prefs?select=chat_id,pinned,muted,archived')).forEach(r => { P[r.chat_id] = r; }); } catch (e) {}
-    setNavBadge(Object.keys(unread).reduce((t, id) => t + ((P[id] && P[id].muted) ? 0 : unread[id]), 0));
+    setNavBadge(Object.keys(unread).reduce((t, id) => t + (((P[id] && P[id].muted) || id === CHAT) ? 0 : unread[id]), 0));
     const q = el('input'), list = el('div');
     q.placeholder = 'ابحث في المحادثات…'; list.style.cssText = 'display:flex;flex-direction:column;gap:10px';
     const items = ids.map(id => {
@@ -1584,11 +1584,7 @@ function deskWelcome() {
 }
 DESK.addEventListener('change', () => { if (!$('#app').hidden) { $('#slist').replaceChildren(); tab(CURTAB || 'chats'); } });
 $('#snew').onclick = () => tab('new');
-setInterval(() => {
-  if (!DESK.matches || $('#app').hidden || document.hidden || document.querySelector('.sbg')) return;
-  const q = $('#slist input'); if (!q || q.value || document.activeElement === q) return;
-  viewChats();
-}, 20000);
+setInterval(() => { if ($('#app').hidden || document.hidden || (INB && INB.readyState === 1)) return; inboxSync(); }, 20000);
 document.addEventListener('keydown', e => {
   if (!DESK.matches || $('#app').hidden) return;
   const k = e.key, busy = document.querySelector('.sbg,.ginfo,.sv,.callbox');
@@ -1628,7 +1624,63 @@ document.addEventListener('paste', e => {
   dz.addEventListener('dragleave', () => { dz.hidden = true; });
   dz.addEventListener('drop', e => { e.preventDefault(); dz.hidden = true; const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f && !deskSendImage(f)) toast('الملف ليس صورة صالحة'); });
 }
-function enterApp() { show('app'); tab('chats'); ping(); startPresence(); }
+
+/* ---------- Live inbox: unread counter in real time ---------- */
+let INB = null, INBHB = null, INBT = null, INBR = null, INBD = null, INBREF = 0;
+function inboxStop() {
+  clearInterval(INBHB); clearInterval(INBR); clearTimeout(INBT); clearTimeout(INBD);
+  if (INB) { INB.onclose = null; try { INB.close(); } catch (e) {} INB = null; }
+}
+function inboxStart() {
+  inboxStop();
+  if (!S || !ME) return;
+  let ws; try { ws = new WebSocket(CFG.url.replace('https', 'wss') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(CFG.key) + '&vsn=1.0.0'); } catch (e) { return; }
+  INB = ws;
+  const send = (t, event, payload) => { if (ws.readyState === 1) ws.send(JSON.stringify({ topic: t, event, payload, ref: String(++INBREF) })); };
+  ws.onopen = () => {
+    send('realtime:inbox-' + ME.id, 'phx_join', {
+      config: { broadcast: { ack: false, self: false }, presence: { key: '' },
+        postgres_changes: [{ event: 'INSERT', schema: 'public', table: 'messages' },
+          { event: 'UPDATE', schema: 'public', table: 'chat_members', filter: 'user_id=eq.' + ME.id }] },
+      access_token: S.access_token
+    });
+    INBHB = setInterval(() => send('phoenix', 'heartbeat', {}), 25000);
+    inboxSync();
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+    if (m.event !== 'postgres_changes') return;
+    const d = m.payload && m.payload.data;
+    if (d && d.table === 'messages' && d.record && d.record.sender_id === ME.id) return;
+    inboxSync();
+  };
+  ws.onclose = () => { clearInterval(INBHB); if (INB === ws) { INB = null; INBT = setTimeout(inboxStart, 3000); } };
+  INBR = setInterval(inboxStart, 45 * 60 * 1000);
+}
+function inboxResume() { if (!S || !ME || $('#app').hidden) return; if (!INB || INB.readyState > 1) inboxStart(); else inboxSync(); }
+async function refreshUnread() {
+  try {
+    const [mem, ms, pf] = await Promise.all([
+      api('/rest/v1/chat_members?select=chat_id,last_read_at&user_id=eq.' + ME.id),
+      api('/rest/v1/messages?select=chat_id,created_at&sender_id=neq.' + ME.id + '&order=created_at.desc&limit=500'),
+      api('/rest/v1/chat_prefs?select=chat_id,muted').catch(() => [])
+    ]);
+    const mine = {}, muted = {}, n = {}; mem.forEach(r => { mine[r.chat_id] = r.last_read_at; }); pf.forEach(r => { if (r.muted) muted[r.chat_id] = 1; });
+    ms.forEach(m => { if (mine[m.chat_id] && m.created_at > mine[m.chat_id] && !muted[m.chat_id] && m.chat_id !== CHAT) n[m.chat_id] = (n[m.chat_id] || 0) + 1; });
+    setNavBadge(Object.values(n).reduce((a, b) => a + b, 0));
+  } catch (e) {}
+}
+function inboxSync() {
+  clearTimeout(INBD);
+  INBD = setTimeout(() => {
+    if (!ME || $('#app').hidden) return;
+    const typing = i => i && (i.value || document.activeElement === i), busy = document.querySelector('.sbg');
+    if (DESK.matches) { if (!typing($('#slist input')) && !busy) return viewChats(true); }
+    else if (!CHAT && CURTAB === 'chats') { if (!typing($('#view > input')) && !busy) return viewChats(true); }
+    refreshUnread();
+  }, 500);
+}
+function enterApp() { show('app'); tab('chats'); ping(); startPresence(); inboxStart(); }
 const isTG = u => !!u && (/@telegram\.invalid$/.test(u.email || '') || !!(u.user_metadata && u.user_metadata.provider_name === 'telegram'));
 function showSetup() {
   document.querySelectorAll('#setup .pwf').forEach(f => { f.hidden = isTG(ME); });
