@@ -9,14 +9,15 @@ self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : '' }; }
   const call = d.type === 'call';
+  const en = d.lang === 'en'; /* sent by the send-push function */
   const o = {
-    body: d.body || '', lang: 'ar', dir: 'rtl', renotify: true, data: d,
+    body: d.body || '', lang: en ? 'en' : 'ar', dir: en ? 'ltr' : 'rtl', renotify: true, data: d,
     tag: call ? 'call-' + d.call_id : 'chat-' + (d.chat_id || 'x'),
   };
   if (call) {
     o.requireInteraction = true;
     o.vibrate = [600, 300, 600, 300, 600, 300, 600, 300, 600];
-    o.actions = [{ action: 'answer', title: '📞 رد' }];
+    o.actions = [{ action: 'answer', title: en ? '📞 Answer' : '📞 رد' }];
   } else { o.vibrate = [150]; }
   e.waitUntil(self.registration.showNotification(d.title || 'PhilippoPempo', o));
 });
