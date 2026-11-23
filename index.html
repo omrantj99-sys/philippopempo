@@ -1472,7 +1472,16 @@ async function enablePush() {
   const old = await reg.pushManager.getSubscription(); if (old) await old.unsubscribe();
   const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID_PUB) });
   const j = sub.toJSON();
-  await api('/rest/v1/push_subscriptions?on_conflict=endpoint', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_id: ME.id }) });
+  const row = { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_id: ME.id, lang: LANG };
+  const up = r => api('/rest/v1/push_subscriptions?on_conflict=endpoint', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(r) });
+  try { await up(row); } catch (e) { delete row.lang; await up(row); }
+}
+async function syncPushLang() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (!sub) return;
+    await api('/rest/v1/push_subscriptions?endpoint=eq.' + encodeURIComponent(sub.endpoint), { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ lang: LANG }) });
+  } catch (e) {}
 }
 
 /* ---------- Boot ---------- */
@@ -1680,7 +1689,7 @@ function inboxSync() {
     refreshUnread();
   }, 500);
 }
-function enterApp() { show('app'); tab('chats'); ping(); startPresence(); inboxStart(); }
+function enterApp() { show('app'); tab('chats'); ping(); startPresence(); inboxStart(); syncPushLang(); }
 const isTG = u => !!u && (/@telegram\.invalid$/.test(u.email || '') || !!(u.user_metadata && u.user_metadata.provider_name === 'telegram'));
 function showSetup() {
   document.querySelectorAll('#setup .pwf').forEach(f => { f.hidden = isTG(ME); });
