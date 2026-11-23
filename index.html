@@ -597,7 +597,7 @@ async function myChats() {
   const by = {}; rows.forEach(r => { (by[r.chat_id] = by[r.chat_id] || []).push(r); });
   return Object.keys(by).map(id => {
     const g = G[id] && G[id].is_group ? G[id] : null, oth = by[id].filter(r => r.user_id !== ME.id);
-    return { id, name: (G[id] && G[id].title === SAVED) ? '⭐ الرسائل المحفوظة' : g ? (g.title || 'مجموعة') : (oth.map(r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم').join('، ') || 'ملاحظاتي') };
+    return { id, name: (G[id] && G[id].title === SAVED) ? '⭐ الرسائل المحفوظة' : g ? (g.title || 'مجموعة') : (oth.map(r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم').join(LANG === 'en' ? ', ' : '، ') || 'ملاحظاتي') };
   });
 }
 async function sendFwd(x, to) {
@@ -756,7 +756,7 @@ async function viewChats(quiet) {
       const oth = by[id].filter(r => r.user_id !== ME.id);
       const pn = r => (r.profiles && (r.profiles.name || r.profiles.phone)) || 'مستخدم';
       const saved = !g && G[id] && G[id].title === SAVED;
-      const names = saved ? '⭐ الرسائل المحفوظة' : g ? (g.title || 'مجموعة') : (oth.map(pn).join('، ') || 'ملاحظاتي');
+      const names = saved ? '⭐ الرسائل المحفوظة' : g ? (g.title || 'مجموعة') : (oth.map(pn).join(LANG === 'en' ? ', ' : '، ') || 'ملاحظاتي');
       const b = el('button', 'row'); b.dataset.n = names.toLowerCase(); b.dataset.id = id;
       const dm = !g && oth.length === 1;
       b.append(avatar(names, g ? g.avatar_path : (dm && oth[0].profiles ? oth[0].profiles.avatar_path : null)), el('div', 'grow', names));
