@@ -884,7 +884,7 @@ function askAI(chatId, reload) {
     try {
       const r = await raw('/functions/v1/study-ai', { method: 'POST', body: JSON.stringify({ q, lang: LANG }) }), d = await r.json().catch(() => ({}));
       if (r.status === 429) throw new Error('وصلت حدك اليوم، جرّب بكرا');
-      if (!r.ok || !d.a) throw new Error('المساعد مو متاح هلق، جرّب بعد شوي');
+      if (!r.ok || !d.a) throw new Error('المساعد مو متاح هلق، جرّب بعد شوي' + ' (' + r.status + (d.error ? ': ' + d.error : '') + (d.status ? '/' + d.status : '') + ')');
       await api('/rest/v1/messages', { method: 'POST', body: JSON.stringify({ chat_id: chatId, body: '❓ ' + q + '\n\n🤖 ' + d.a }) });
       bg.remove(); reload();
       if (typeof d.left === 'number') toast(stL('باقي اليوم', 'Left today') + ': ' + d.left);
@@ -1973,3 +1973,4 @@ boot();
 </script>
 </body>
 </html>
+
